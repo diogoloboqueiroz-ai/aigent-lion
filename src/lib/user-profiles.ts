@@ -1,7 +1,7 @@
 import { getStoredUserProfessionalProfile } from "@/lib/company-vault";
 import { listToTextarea, parsePlatformList, textareaToList } from "@/lib/agent-profiles";
 import { buildMarketingToolPromptContext } from "@/lib/marketing-toolbox";
-import type { UserProfessionalProfile } from "@/lib/domain";
+import type { UserPermission, UserProfessionalProfile, UserRole } from "@/lib/domain";
 import type { UserSession } from "@/lib/session";
 
 export function getUserProfileKey(session: Pick<UserSession, "provider" | "sub">) {
@@ -17,9 +17,19 @@ export function getUserProfessionalProfile(session: UserSession | null): UserPro
   const storedProfile = getStoredUserProfessionalProfile(userKey);
 
   if (storedProfile) {
-    return {
+    const role = storedProfile.role ?? "strategist";
+    const permissions = storedProfile.permissions ?? getDefaultPermissionsForRole(role);
+    const hydratedProfile = {
       ...storedProfile,
-      systemPrompt: buildProfessionalSystemPrompt(storedProfile)
+      role,
+      permissions,
+      tenantScope: storedProfile.tenantScope ?? "all",
+      allowedCompanySlugs: storedProfile.allowedCompanySlugs ?? []
+    };
+
+    return {
+      ...hydratedProfile,
+      systemPrompt: buildProfessionalSystemPrompt(hydratedProfile)
     };
   }
 
@@ -27,6 +37,10 @@ export function getUserProfessionalProfile(session: UserSession | null): UserPro
     userKey,
     email: session.email,
     displayName: session.name,
+    role: "strategist",
+    permissions: getDefaultPermissionsForRole("strategist"),
+    tenantScope: "all",
+    allowedCompanySlugs: [],
     trainingStatus: "seeded",
     updatedAt: new Date().toISOString(),
     professionalTitle: "Lider de marketing e crescimento",
@@ -74,6 +88,13 @@ export function getUserProfessionalProfile(session: UserSession | null): UserPro
 export function buildProfessionalSystemPrompt(profile: UserProfessionalProfile) {
   return [
     `Voce opera em nome de ${profile.displayName}, que atua como ${profile.professionalTitle}.`,
+    `Role operacional: ${profile.role}.`,
+    `Permissoes ativas: ${profile.permissions.join(", ")}.`,
+    `Escopo de tenants: ${
+      profile.tenantScope === "restricted"
+        ? `restrito a ${profile.allowedCompanySlugs?.join(", ") || "nenhuma empresa"}`
+        : "acesso amplo"
+    }.`,
     `Modelo profissional: ${profile.businessModel}`,
     `North star estrategico: ${profile.strategicNorthStar}`,
     `Estilo de decisao: ${profile.decisionStyle}`,
@@ -102,6 +123,10 @@ export function parseProfessionalProfileForm(formData: FormData, currentProfile:
     ...currentProfile,
     trainingStatus: "customized",
     updatedAt: new Date().toISOString(),
+    role: normalizeRole(String(formData.get("role") ?? currentProfile.role)),
+    permissions: currentProfile.permissions,
+    tenantScope: currentProfile.tenantScope ?? "all",
+    allowedCompanySlugs: currentProfile.allowedCompanySlugs ?? [],
     professionalTitle: String(formData.get("professionalTitle") ?? ""),
     businessModel: String(formData.get("businessModel") ?? ""),
     strategicNorthStar: String(formData.get("strategicNorthStar") ?? ""),
@@ -119,10 +144,67 @@ export function parseProfessionalProfileForm(formData: FormData, currentProfile:
     strategicNotes: String(formData.get("strategicNotes") ?? "")
   };
 
-  return {
+  const finalProfile = {
     ...nextProfile,
-    systemPrompt: buildProfessionalSystemPrompt(nextProfile)
+    permissions: getDefaultPermissionsForRole(nextProfile.role)
+  };
+
+  return {
+    ...finalProfile,
+    systemPrompt: buildProfessionalSystemPrompt(finalProfile)
   };
 }
 
 export { listToTextarea };
+
+function normalizeRole(value: string): UserRole {
+  switch (value) {
+    case "admin":
+    case "operator":
+    case "analyst":
+    case "viewer":
+      return value;
+    default:
+      return "strategist";
+  }
+}
+
+export function getDefaultPermissionsForRole(role: UserRole): UserPermission[] {
+  switch (role) {
+    case "admin":
+      return [
+        "agent:run",
+        "agent:decide",
+        "agent:learn",
+        "execution:generate",
+        "execution:apply",
+        "scheduler:manage",
+        "scheduler:run",
+        "governance:review",
+        "payments:approve"
+      ];
+    case "strategist":
+      return [
+        "agent:run",
+        "agent:decide",
+        "agent:learn",
+        "execution:generate",
+        "execution:apply",
+        "scheduler:manage",
+        "scheduler:run",
+        "governance:review"
+      ];
+    case "operator":
+      return [
+        "agent:run",
+        "agent:decide",
+        "agent:learn",
+        "execution:generate",
+        "scheduler:run"
+      ];
+    case "analyst":
+      return ["agent:decide", "agent:learn", "execution:generate"];
+    default:
+      return [];
+  }
+}

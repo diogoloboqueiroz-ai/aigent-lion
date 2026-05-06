@@ -18,7 +18,12 @@ import {
   upsertStoredSocialRuntimeTask
 } from "@/lib/company-vault";
 import { approvePaymentRequest, denyPaymentRequest } from "@/lib/payments";
-import { buildSocialRuntimeTaskForAd, getCompanySocialBinding } from "@/lib/social-runtime";
+import { recordCompanyAuditEvent } from "@/lib/governance";
+import {
+  buildSocialRuntimeTaskForAd,
+  buildSocialRuntimeTaskForPost,
+  getCompanySocialBinding
+} from "@/lib/social-runtime";
 import {
   buildScheduledSocialPostFromPublishingRequest,
   approveScheduledSocialPost,
@@ -126,6 +131,33 @@ export async function POST(
       return NextResponse.json({ error: "Post social nao encontrado" }, { status: 404 });
     }
 
+    if (intent === "queue-runtime") {
+      if (post.status !== "scheduled") {
+        return NextResponse.redirect(new URL(`/empresas/${companyId}/aprovacoes?decision=approval-required`, request.url), {
+          status: 303
+        });
+      }
+
+      const binding = getCompanySocialBinding(workspace.company, post.platform, workspace.socialPlatforms);
+      const task = buildSocialRuntimeTaskForPost(post, binding, session.email);
+
+      upsertStoredSocialRuntimeTask(task);
+      recordCompanyAuditEvent({
+        companySlug: workspace.company.slug,
+        connector: "system",
+        kind: "decision",
+        title: "Post aprovado enviado para runtime",
+        details: `O post ${post.id} foi enviado ao Social Runtime por ${session.email}. Status da tarefa: ${task.status}.`
+      });
+
+      return NextResponse.redirect(
+        new URL(`/empresas/${companyId}/aprovacoes?decision=runtime-${task.status}`, request.url),
+        {
+          status: 303
+        }
+      );
+    }
+
     const nextPost =
       intent === "reject"
         ? rejectScheduledSocialPost(post)
@@ -150,6 +182,13 @@ export async function POST(
     const task = buildSocialRuntimeTaskForAd(draft, binding, session.email);
 
     upsertStoredSocialRuntimeTask(task);
+    recordCompanyAuditEvent({
+      companySlug: workspace.company.slug,
+      connector: "system",
+      kind: "decision",
+      title: "Anuncio aprovado enviado para runtime",
+      details: `O draft ${draft.id} foi enviado ao Social Runtime por ${session.email}. Status da tarefa: ${task.status}.`
+    });
     return NextResponse.redirect(
       new URL(`/empresas/${companyId}/aprovacoes?decision=runtime-${task.status}`, request.url),
       {

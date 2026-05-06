@@ -77,6 +77,7 @@ export function generateCompanyExecutionPlan(
   const topAngles = workspace.keywordStrategy.conversionAngles.slice(0, 2);
   const topChannels = workspace.strategyPlan.priorityChannels.slice(0, 3);
   const latestReport = workspace.reports[0];
+  const latestCmoDecision = workspace.automationRuns[0]?.cmoDecision;
   const paymentGuardrail = workspace.paymentProfile.approvalRule;
   const topPlaybook = workspace.agentLearnings.find(
     (learning) => learning.kind === "playbook" || learning.kind === "opportunity"
@@ -272,7 +273,9 @@ export function generateCompanyExecutionPlan(
   );
 
   const weeklyFocus = [
-    sortedTracks[0]
+    latestCmoDecision
+      ? `Tese do CMO Agent: ${latestCmoDecision.weeklyThesis}`
+      : sortedTracks[0]
       ? `Atacar primeiro: ${sortedTracks[0].title.toLowerCase()}.`
       : `Proteger ${workspace.strategyPlan.primaryObjective.toLowerCase()}.`,
     `Executar nos canais: ${topChannels.join(", ") || "google-ads, ga4, search-console"}.`,
@@ -301,6 +304,10 @@ export function generateCompanyExecutionPlan(
     weeklyFocus.push(`Aplicar o estilo decisorio: ${professionalProfile.decisionStyle}.`);
   }
 
+  if (latestCmoDecision?.primaryBet) {
+    weeklyFocus.push(`Aposta principal desta rodada: ${latestCmoDecision.primaryBet}.`);
+  }
+
   return {
     id: `execution-${workspace.company.slug}-${Date.now()}`,
     companySlug: workspace.company.slug,
@@ -323,8 +330,10 @@ export function generateCompanyExecutionPlan(
     ],
     approvalQueue: buildApprovalQueue(workspace, analysis, professionalProfile),
     operatorContext: professionalProfile
-      ? `${professionalProfile.displayName} atua como ${professionalProfile.professionalTitle.toLowerCase()} e quer ${professionalProfile.strategicNorthStar.toLowerCase()}.`
-      : "Plano gerado sem memoria profissional do operador.",
+      ? `${professionalProfile.displayName} atua como ${professionalProfile.professionalTitle.toLowerCase()} e quer ${professionalProfile.strategicNorthStar.toLowerCase()}.${latestCmoDecision ? ` O CMO Agent definiu foco em ${latestCmoDecision.dominantConstraint}.` : ""}`
+      : latestCmoDecision
+        ? `Plano gerado com foco estrategico do CMO Agent em ${latestCmoDecision.dominantConstraint}.`
+        : "Plano gerado sem memoria profissional do operador.",
     origin: options?.origin ?? "manual",
     autopilotSummary: buildAutopilotSummary(workspace, analysis, optimizationScorecards),
     decisionSignals: buildDecisionSignals(analysis, optimizationScorecards),
@@ -1170,7 +1179,7 @@ function buildRecommendedActions(
   return dedupeExecutionActions(actions);
 }
 
-function buildOptimizationScorecards(
+export function buildOptimizationScorecards(
   workspace: CompanyWorkspace
 ): NonNullable<CompanyExecutionPlan["optimizationScorecards"]> {
   const priorityPlatforms = Array.from(
@@ -1212,45 +1221,61 @@ function buildOptimizationScorecards(
       const spend = snapshot.spend ?? 0;
       const conversions = snapshot.conversions ?? 0;
       const cpa = snapshot.cpa ?? (spend > 0 && conversions > 0 ? spend / conversions : undefined);
-      const health = determineOptimizationHealth({
-        spend,
-        conversions,
-        cpa,
+        const health = determineOptimizationHealth({
+          spend,
+          conversions,
+          cpa,
         ctr: snapshot.ctr,
         conversionSignalsBlocked,
-        conversionSignalsFailed,
-        cpaTarget
-      });
-      const decision = mapHealthToOptimizationDecision(health);
+          conversionSignalsFailed,
+          cpaTarget
+        });
+        const baseDecision = mapHealthToOptimizationDecision(health);
+        const memoryBias = getOptimizationMemoryBias(workspace, platform);
+        const decision = applyOptimizationMemoryDecisionBias(baseDecision, health, memoryBias);
+        const score = applyOptimizationMemoryScoreBias(
+          scoreOptimizationHealth(health, conversionSignalsSent, conversionSignalsBlocked, conversionSignalsFailed),
+          memoryBias
+        );
+        const memoryEvidence = buildOptimizationMemoryEvidence(memoryBias);
 
-      return {
-        id: `scorecard-${workspace.company.slug}-${platform}`,
-        channel: platform,
-        platform,
-        window: snapshot.window === "24h" ? "7d" : snapshot.window,
-        health,
-        decision,
-        score: scoreOptimizationHealth(health, conversionSignalsSent, conversionSignalsBlocked, conversionSignalsFailed),
-        spend: snapshot.spend,
-        conversions: snapshot.conversions,
-        revenue: snapshot.revenue,
-        cpa,
-        ctr: snapshot.ctr,
-        conversionSignalsSent,
-        conversionSignalsBlocked,
-        conversionSignalsFailed,
-        rationale: buildOptimizationRationale(platform, health, cpa, cpaTarget, conversionSignalsBlocked, conversionSignalsFailed),
-        evidence: [
-          getSnapshotEvidence(workspace, platform),
-          `Dispatch ${conversionSignalsSent}/${conversionSignalsBlocked}/${conversionSignalsFailed} em sent/bloqueado/falha.`
-        ]
-      };
-    })
+        return {
+          id: `scorecard-${workspace.company.slug}-${platform}`,
+          channel: platform,
+          platform,
+          window: snapshot.window === "24h" ? "7d" : snapshot.window,
+          health,
+          decision,
+          score,
+          spend: snapshot.spend,
+          conversions: snapshot.conversions,
+          revenue: snapshot.revenue,
+          cpa,
+          ctr: snapshot.ctr,
+          conversionSignalsSent,
+          conversionSignalsBlocked,
+          conversionSignalsFailed,
+          rationale: buildOptimizationRationale(
+            platform,
+            health,
+            cpa,
+            cpaTarget,
+            conversionSignalsBlocked,
+            conversionSignalsFailed,
+            memoryBias
+          ),
+          evidence: [
+            getSnapshotEvidence(workspace, platform),
+            `Dispatch ${conversionSignalsSent}/${conversionSignalsBlocked}/${conversionSignalsFailed} em sent/bloqueado/falha.`,
+            ...(memoryEvidence ? [memoryEvidence] : [])
+          ]
+        };
+      })
     .filter((scorecard): scorecard is NonNullable<typeof scorecard> => Boolean(scorecard))
     .sort((left, right) => right.score - left.score);
 }
 
-function buildOptimizationExperiments(
+export function buildOptimizationExperiments(
   workspace: CompanyWorkspace,
   scorecards: NonNullable<CompanyExecutionPlan["optimizationScorecards"]>
 ): NonNullable<CompanyExecutionPlan["recommendedExperiments"]> {
@@ -1258,6 +1283,9 @@ function buildOptimizationExperiments(
     .filter((scorecard) => scorecard.decision === "hold" || scorecard.decision === "fix")
     .slice(0, 3)
     .map((scorecard, index) => {
+      const previousOutcome = workspace.experimentOutcomes.find(
+        (outcome) => outcome.channel === scorecard.channel
+      );
       const angleA = workspace.keywordStrategy.conversionAngles[index] ?? workspace.keywordStrategy.conversionAngles[0] ?? "prova social";
       const angleB = workspace.keywordStrategy.conversionAngles[index + 1] ?? workspace.keywordStrategy.landingMessages[0] ?? "clareza de oferta";
 
@@ -1268,7 +1296,19 @@ function buildOptimizationExperiments(
         hypothesis: `Se ${angleA.toLowerCase()} superar ${angleB.toLowerCase()}, ${getOptimizationChannelLabel(scorecard.channel)} deve ganhar eficiencia comercial.`,
         primaryMetric: workspace.strategyPlan.cpaTarget,
         variants: [angleA, angleB],
-        status: "planned",
+        status:
+          previousOutcome?.status === "won"
+            ? "won"
+            : previousOutcome?.status === "lost"
+              ? "lost"
+              : "planned",
+        sourceScorecardId: scorecard.id,
+        baselineMetricValue: scorecard.cpa ?? scorecard.ctr ?? scorecard.score,
+        successCriteria: `Ganhar eficiencia suficiente para mover ${getOptimizationChannelLabel(scorecard.channel)} de ${scorecard.decision} para scale sem elevar risco operacional.`,
+        observationWindowDays: scorecard.window === "28d" ? 28 : 7,
+        confidence: Number((Math.min(0.92, Math.max(0.42, scorecard.score / 100))).toFixed(2)),
+        winningVariant: previousOutcome?.winningVariant,
+        lastEvaluatedAt: previousOutcome?.updatedAt,
         nextAction: `Gerar duas variacoes de criativo/copy para ${getOptimizationChannelLabel(scorecard.channel)} e medir impacto em CTR, CPA e conversao.`
       };
     });
@@ -1392,23 +1432,109 @@ function buildOptimizationRationale(
   cpa: number | undefined,
   cpaTarget: number | undefined,
   blocked: number,
-  failed: number
+  failed: number,
+  memoryBias: {
+    winnerSignals: number;
+    loserSignals: number;
+  }
 ) {
+  const memoryFragment =
+    memoryBias.winnerSignals > 0 || memoryBias.loserSignals > 0
+      ? ` Memoria recente do agente: ${memoryBias.winnerSignals} sinais vencedores e ${memoryBias.loserSignals} sinais de risco neste canal.`
+      : "";
+
   if (health === "winning") {
-    return `${getOptimizationChannelLabel(platform)} esta devolvendo sinal suficiente para discutir escala assistida.`;
+    return `${getOptimizationChannelLabel(platform)} esta devolvendo sinal suficiente para discutir escala assistida.${memoryFragment}`;
   }
 
   if (health === "at_risk") {
-    return `${getOptimizationChannelLabel(platform)} segue operacional, mas tracking ou dispatch ainda gera ${blocked + failed} sinais problematicos.`;
+    return `${getOptimizationChannelLabel(platform)} segue operacional, mas tracking ou dispatch ainda gera ${blocked + failed} sinais problematicos.${memoryFragment}`;
   }
 
   if (health === "wasteful") {
     return cpaTarget && cpa
-      ? `${getOptimizationChannelLabel(platform)} esta acima da meta de CPA (${formatCurrency(cpa)} vs ${formatCurrency(cpaTarget)}).`
-      : `${getOptimizationChannelLabel(platform)} esta consumindo mais energia do que retorno neste ciclo.`;
+      ? `${getOptimizationChannelLabel(platform)} esta acima da meta de CPA (${formatCurrency(cpa)} vs ${formatCurrency(cpaTarget)}).${memoryFragment}`
+      : `${getOptimizationChannelLabel(platform)} esta consumindo mais energia do que retorno neste ciclo.${memoryFragment}`;
   }
 
-  return `${getOptimizationChannelLabel(platform)} ainda precisa de mais amostra antes de escalar ou cortar.`;
+  return `${getOptimizationChannelLabel(platform)} ainda precisa de mais amostra antes de escalar ou cortar.${memoryFragment}`;
+}
+
+function getOptimizationMemoryBias(workspace: CompanyWorkspace, platform: PlatformId) {
+  const channel = platform.toLowerCase();
+  const agentLearnings = workspace.agentLearnings ?? [];
+  const experimentOutcomes = workspace.experimentOutcomes ?? [];
+  const learningPlaybooks = workspace.learningPlaybooks ?? [];
+  const winnerSignals = agentLearnings.filter(
+    (learning) =>
+      learning.status !== "historical" &&
+      learning.kind === "playbook" &&
+      learning.title.toLowerCase().includes(channel)
+  ).length;
+  const loserSignals = agentLearnings.filter(
+    (learning) =>
+      learning.status !== "historical" &&
+      (learning.kind === "risk" || learning.kind === "warning") &&
+      learning.title.toLowerCase().includes(channel)
+  ).length;
+  const experimentWins = experimentOutcomes.filter(
+    (outcome) => outcome.channel === channel && outcome.status === "won"
+  ).length;
+  const experimentLosses = experimentOutcomes.filter(
+    (outcome) =>
+      outcome.channel === channel &&
+      (outcome.status === "lost" || outcome.status === "inconclusive")
+  ).length;
+  const activePlaybooks = learningPlaybooks.filter(
+    (playbook) => playbook.channel === channel && playbook.status === "active"
+  ).length;
+  const retiredPlaybooks = learningPlaybooks.filter(
+    (playbook) => playbook.channel === channel && playbook.status === "retired"
+  ).length;
+
+  return {
+    winnerSignals: winnerSignals + experimentWins + activePlaybooks,
+    loserSignals: loserSignals + experimentLosses + retiredPlaybooks
+  };
+}
+
+function applyOptimizationMemoryDecisionBias(
+  decision: NonNullable<CompanyExecutionPlan["optimizationScorecards"]>[number]["decision"],
+  health: NonNullable<CompanyExecutionPlan["optimizationScorecards"]>[number]["health"],
+  memoryBias: ReturnType<typeof getOptimizationMemoryBias>
+) {
+  if (memoryBias.loserSignals >= 2 && (decision === "hold" || decision === "fix")) {
+    return "pause" as const;
+  }
+
+  if (memoryBias.winnerSignals >= 2 && decision === "hold" && health === "learning") {
+    return "scale" as const;
+  }
+
+  if (memoryBias.winnerSignals > memoryBias.loserSignals && decision === "fix") {
+    return "hold" as const;
+  }
+
+  if (memoryBias.loserSignals > memoryBias.winnerSignals && decision === "scale") {
+    return "hold" as const;
+  }
+
+  return decision;
+}
+
+function applyOptimizationMemoryScoreBias(
+  score: number,
+  memoryBias: ReturnType<typeof getOptimizationMemoryBias>
+) {
+  return Math.max(0, Math.min(100, score + memoryBias.winnerSignals * 6 - memoryBias.loserSignals * 6));
+}
+
+function buildOptimizationMemoryEvidence(memoryBias: ReturnType<typeof getOptimizationMemoryBias>) {
+  if (memoryBias.winnerSignals === 0 && memoryBias.loserSignals === 0) {
+    return undefined;
+  }
+
+  return `Memoria persistida do Agent Lion: ${memoryBias.winnerSignals} sinais vencedores e ${memoryBias.loserSignals} sinais de risco neste canal.`;
 }
 
 function dedupeExecutionActions(actions: CompanyExecutionAction[]) {

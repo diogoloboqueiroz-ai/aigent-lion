@@ -1,4 +1,10 @@
-import { appendStoredAuditEvent } from "@/lib/company-vault";
+import { appendPersistedAuditEvent } from "@/infrastructure/persistence/company-automation-storage";
+import { isCompanyVaultConfigured } from "@/infrastructure/persistence/company-vault-payload-store";
+import { sanitizeAuditText } from "@/core/observability/redaction";
+import {
+  appendManagedAuditEvent,
+  isManagedAutomationStoreConfigured
+} from "@/infrastructure/persistence/managed-automation-store";
 import type { ConnectorAuditEvent, ExecutionTrackPriority, PlatformId } from "@/lib/domain";
 
 type AuditEventInput = {
@@ -12,21 +18,31 @@ type AuditEventInput = {
 
 export function createCompanyAuditEvent(input: AuditEventInput) {
   const timestamp = new Date().toISOString();
-  const suffix = `${Date.now()}-${sanitizeForId(input.title).slice(0, 40)}`;
+  const sanitizedTitle = sanitizeAuditText(input.title, 120) || "audit-event";
+  const sanitizedDetails = sanitizeAuditText(input.details, 600) || "Sem detalhes adicionais.";
+  const suffix = `${Date.now()}-${sanitizeForId(sanitizedTitle).slice(0, 40)}`;
 
   return {
     id: `audit-${input.companySlug}-${suffix}`,
     timestamp,
     connector: input.connector,
     kind: input.kind,
-    title: input.priority ? `${input.title} [${input.priority}]` : input.title,
-    details: input.details
+    title: input.priority ? `${sanitizedTitle} [${input.priority}]` : sanitizedTitle,
+    details: sanitizedDetails
   } satisfies ConnectorAuditEvent;
 }
 
 export function recordCompanyAuditEvent(input: AuditEventInput) {
   const event = createCompanyAuditEvent(input);
-  appendStoredAuditEvent(event);
+
+  if (isManagedAutomationStoreConfigured()) {
+    void appendManagedAuditEvent(event);
+  }
+
+  if (isCompanyVaultConfigured()) {
+    appendPersistedAuditEvent(event);
+  }
+
   return event;
 }
 

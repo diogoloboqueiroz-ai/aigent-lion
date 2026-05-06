@@ -8,6 +8,7 @@ import {
 } from "@/lib/company-vault";
 import { getCompanyWorkspace } from "@/lib/connectors";
 import type { SocialPlatformId } from "@/lib/domain";
+import { syncCompanyLearningMemory } from "@/lib/learning";
 import { executeSocialRuntimeBatch } from "@/lib/social-execution";
 import {
   buildSocialRuntimeSyncTask,
@@ -146,6 +147,11 @@ export async function POST(
   if (intent === "execute-queued") {
     const queuedTasks = workspace.socialRuntimeTasks.filter((entry) => entry.status === "queued");
     const batch = await executeSocialRuntimeBatch(workspace.company, queuedTasks, session.email);
+    const latestWorkspace = getCompanyWorkspace(companyId, professionalProfile);
+
+    if (latestWorkspace) {
+      syncCompanyLearningMemory({ workspace: latestWorkspace });
+    }
 
     runtimeBaseUrl.searchParams.set(
       "executed",

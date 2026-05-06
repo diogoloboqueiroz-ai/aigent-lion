@@ -71,6 +71,12 @@ export type ConversionDispatchStatus = "queued" | "sent" | "blocked" | "failed";
 export type OptimizationHealth = "winning" | "learning" | "at_risk" | "wasteful";
 export type OptimizationDecision = "scale" | "hold" | "fix" | "pause";
 export type OptimizationExperimentStatus = "planned" | "running" | "won" | "lost";
+export type ExperimentOutcomeStatus = "observing" | "won" | "lost" | "inconclusive";
+export type LearningPlaybookStatus = "candidate" | "active" | "retired";
+export type LearningBoundary = "tenant_private" | "cross_tenant_safe";
+export type LearningShareability = "restricted" | "anonymizable" | "shared";
+export type LearningConfidenceState = "emerging" | "validated" | "decaying" | "retired";
+export type LearningEvidenceStrength = "weak" | "directional" | "moderate" | "strong";
 export type CreativeAssetVersionStatus = "draft" | "ready_for_approval" | "approved" | "published";
 export type CreativeQaStatus = "passed" | "warning" | "blocked";
 
@@ -178,6 +184,10 @@ export type UserProfessionalProfile = {
   userKey: string;
   email: string;
   displayName: string;
+  role: UserRole;
+  permissions: UserPermission[];
+  tenantScope?: "all" | "restricted";
+  allowedCompanySlugs?: string[];
   trainingStatus: ProfileTrainingStatus;
   updatedAt: string;
   professionalTitle: string;
@@ -197,6 +207,19 @@ export type UserProfessionalProfile = {
   strategicNotes: string;
   systemPrompt: string;
 };
+
+export type UserRole = "admin" | "strategist" | "operator" | "analyst" | "viewer";
+
+export type UserPermission =
+  | "agent:run"
+  | "agent:decide"
+  | "agent:learn"
+  | "execution:generate"
+  | "execution:apply"
+  | "scheduler:manage"
+  | "scheduler:run"
+  | "governance:review"
+  | "payments:approve";
 
 export type CompanyCompetitor = {
   name: string;
@@ -374,11 +397,15 @@ export type AgentLearningSource =
   | "runtime_log"
   | "report"
   | "social_insight"
-  | "conversion_event";
+  | "conversion_event"
+  | "experiment_outcome"
+  | "playbook";
 
 export type CompanyAgentLearning = {
   id: string;
   companySlug: string;
+  learningBoundary: LearningBoundary;
+  shareability: Exclude<LearningShareability, "shared">;
   kind: AgentLearningKind;
   status: AgentLearningStatus;
   priority: ExecutionTrackPriority;
@@ -430,6 +457,721 @@ export type CompanyExecutionPlan = {
   recommendedExperiments?: CompanyOptimizationExperiment[];
   recommendedActions?: CompanyExecutionAction[];
   tracks: CompanyExecutionTrack[];
+};
+
+export type CompanyAutomationState =
+  | "ingest_context"
+  | "analyze"
+  | "diagnose"
+  | "prioritize"
+  | "propose"
+  | "approve_if_needed"
+  | "execute"
+  | "observe"
+  | "evaluate"
+  | "learn"
+  | "schedule_next_cycle";
+
+export type CompanyAutomationFindingSeverity = "low" | "medium" | "high" | "critical";
+export type CompanyAutomationOpportunityArea =
+  | "acquisition"
+  | "conversion"
+  | "content"
+  | "operations"
+  | "retention"
+  | "tracking"
+  | "governance";
+export type CompanyAutomationApprovalMode =
+  | "auto_execute"
+  | "requires_approval"
+  | "policy_review"
+  | "blocked";
+export type CompanyAutomationApprovalStatus = "pending" | "approved" | "rejected";
+export type CompanyAutomationJobStatus =
+  | "planned"
+  | "running"
+  | "completed"
+  | "blocked"
+  | "failed"
+  | "approval_pending";
+export type CompanyAutomationExperimentStatus = "planned" | "running" | "won" | "lost";
+export type CompanyAutomationLearningKind = "playbook" | "risk" | "warning" | "opportunity";
+export type CompanyAutomationTriggerType =
+  | "manual_run"
+  | "scheduled_cycle"
+  | "metric_anomaly"
+  | "alert_recheck"
+  | "approval_resolution"
+  | "api_preview";
+export type CompanyAutomationActionType =
+  | "review_approvals"
+  | "stabilize_runtime"
+  | "queue_social_sync"
+  | "stabilize_tracking"
+  | "follow_up_leads"
+  | "prepare_growth_report"
+  | "launch_experiment"
+  | "refresh_creatives"
+  | "audit_connectors"
+  | "propose_budget_shift"
+  | "pause_underperforming_channel";
+
+export type CompanyPolicyMatrixStatus = "active" | "draft" | "retired";
+export type CompanyPolicyMatrixDecisionOverride =
+  | "auto_execute"
+  | "requires_approval"
+  | "policy_review"
+  | "blocked";
+
+export type CompanyPolicyMatrixActionRule = {
+  actionType: CompanyAutomationActionType;
+  decisionOverride?: CompanyPolicyMatrixDecisionOverride;
+  autoExecuteConfidenceFloor?: number;
+  requireApprovalAboveBudget?: number;
+  policyReviewAboveBudget?: number;
+  requiredApprovers?: string[];
+  policyReviewApprovers?: string[];
+  financeApprovers?: string[];
+  complianceApprovers?: string[];
+  brandApprovers?: string[];
+  approvedDataSources?: string[];
+  blockedDataSources?: string[];
+  forbiddenClaimPatterns?: string[];
+  sensitiveClaimPatterns?: string[];
+  notes?: string[];
+};
+
+export type CompanyPolicyMatrix = {
+  companySlug: string;
+  version: number;
+  status: CompanyPolicyMatrixStatus;
+  defaultRequiredApprovers: string[];
+  defaultPolicyReviewApprovers: string[];
+  globalApprovedDataSources: string[];
+  globalBlockedDataSources: string[];
+  globalForbiddenClaimPatterns: string[];
+  globalSensitiveClaimPatterns: string[];
+  actionRules: CompanyPolicyMatrixActionRule[];
+  createdAt: string;
+  updatedAt: string;
+  updatedBy: string;
+};
+
+export type CompanyAutomationQueueKind = "run_retry" | "run_cycle";
+export type CompanyAutomationQueueStatus =
+  | "queued"
+  | "running"
+  | "retry_waiting"
+  | "completed"
+  | "dead_letter";
+export type CompanyExecutionIntentStatus =
+  | "prepared"
+  | "blocked"
+  | "running"
+  | "completed"
+  | "failed"
+  | "timed_out";
+export type CompanyConnectorCircuitBreakerState = "closed" | "open" | "half_open";
+
+export type CompanyAutomationQueueMetadata = {
+  schedulerAutonomy?: "advisory" | "auto_low_risk" | "approval_required";
+  requestOrigin?: string;
+  fallbackRecipientEmail?: string;
+  source?: "scheduler" | "manual" | "api" | "runtime";
+};
+
+export type CompanyAutomationRiskScore = {
+  score: number;
+  level: "low" | "medium" | "high" | "critical";
+  factors: string[];
+};
+
+export type CompanyAutomationTrigger = {
+  id: string;
+  companySlug: string;
+  type: CompanyAutomationTriggerType;
+  actor: string;
+  summary: string;
+  createdAt: string;
+};
+
+export type CompanyAutomationDiagnosticFinding = {
+  id: string;
+  companySlug: string;
+  area: CompanyAutomationOpportunityArea;
+  summary: string;
+  severity: CompanyAutomationFindingSeverity;
+  confidence: number;
+  evidence: string[];
+  suspectedRootCause: string;
+  suggestedNextMoves: string[];
+};
+
+export type CompanyAutomationOpportunity = {
+  id: string;
+  companySlug: string;
+  findingId: string;
+  area: CompanyAutomationOpportunityArea;
+  title: string;
+  summary: string;
+  hypothesis: string;
+  impactScore: number;
+  urgencyScore: number;
+  effortScore: number;
+  confidence: number;
+  targetMetric: string;
+  evidence: string[];
+};
+
+export type CompanyAutomationAction = {
+  id: string;
+  companySlug: string;
+  opportunityId: string;
+  findingId: string;
+  type: CompanyAutomationActionType;
+  title: string;
+  description: string;
+  rationale: string;
+  evidence: string[];
+  targetMetric: string;
+  targetPlatform?: PlatformId;
+  impactScore: number;
+  urgencyScore: number;
+  confidenceScore: number;
+  effortScore: number;
+  compositeScore: number;
+  priority: ExecutionTrackPriority;
+  riskScore: CompanyAutomationRiskScore;
+  autonomyMode: CompanyAutomationApprovalMode;
+  params?: Record<string, unknown>;
+};
+
+export type CompanyExecutionIntent = {
+  id: string;
+  companySlug: string;
+  jobId: string;
+  actionType: CompanyAutomationActionType;
+  title: string;
+  connectorKey: string;
+  executorKey: string;
+  status: CompanyExecutionIntentStatus;
+  correlationId: string;
+  idempotencyKey: string;
+  timeoutMs: number;
+  attemptCount: number;
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  lastError?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type CompanyConnectorCircuitBreaker = {
+  id: string;
+  companySlug: string;
+  connectorKey: string;
+  state: CompanyConnectorCircuitBreakerState;
+  failureCount: number;
+  successCount: number;
+  threshold: number;
+  openedAt?: string;
+  nextAttemptAt?: string;
+  lastFailureAt?: string;
+  lastSuccessAt?: string;
+  lastError?: string;
+  updatedAt: string;
+};
+
+export type CompanyAutomationJob = {
+  id: string;
+  companySlug: string;
+  actionId: string;
+  type: CompanyAutomationActionType;
+  title: string;
+  status: CompanyAutomationJobStatus;
+  autonomyMode: CompanyAutomationApprovalMode;
+  riskScore: CompanyAutomationRiskScore;
+  rationale: string;
+  evidence: string[];
+  targetPlatform?: PlatformId;
+  inputs: Record<string, unknown>;
+  executionIntentId?: string;
+  correlationId?: string;
+  idempotencyKey?: string;
+  connectorKey?: string;
+  executorKey?: string;
+  createdAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  auditReferences: string[];
+};
+
+export type CompanyAutomationApprovalRequest = {
+  id: string;
+  companySlug: string;
+  jobId: string;
+  title: string;
+  summary: string;
+  status: CompanyAutomationApprovalStatus;
+  approvalMode: Extract<CompanyAutomationApprovalMode, "requires_approval" | "policy_review">;
+  riskScore: CompanyAutomationRiskScore;
+  rationale: string;
+  evidence: string[];
+  createdAt: string;
+};
+
+export type CompanyAutomationPolicyDecision = {
+  jobId: string;
+  companySlug: string;
+  decision: CompanyAutomationApprovalMode;
+  riskScore: CompanyAutomationRiskScore;
+  rationale: string;
+  reasonCodes?: string[];
+  violatedRules?: string[];
+  requiredApprovers?: string[];
+  confidenceFloor?: number;
+  escalationMetadata?: Record<string, unknown>;
+  requiredApprovalMode?: Extract<CompanyAutomationApprovalMode, "requires_approval" | "policy_review">;
+};
+
+export type CompanyAutomationOutcome = {
+  jobId: string;
+  companySlug: string;
+  status: Extract<CompanyAutomationJobStatus, "completed" | "blocked" | "failed">;
+  summary: string;
+  outputs: Record<string, unknown>;
+  executionIntentId?: string;
+  executionIntentStatus?: CompanyExecutionIntentStatus;
+  correlationId?: string;
+  connectorKey?: string;
+  executorKey?: string;
+  durationMs?: number;
+  startedAt: string;
+  finishedAt: string;
+  auditReferences: string[];
+};
+
+export type CompanyAutomationRunMetrics = {
+  totalJobs: number;
+  completedJobs: number;
+  blockedJobs: number;
+  failedJobs: number;
+  approvalPendingJobs: number;
+  autoExecutedJobs: number;
+  timedOutJobs: number;
+  blockedByCircuitBreaker: number;
+  durationMs: number;
+  dominantConstraint?: CompanyCmoStrategicDecision["dominantConstraint"];
+  delegatedModules: CompanyCmoDelegatedModule[];
+  realExecutorsUsed: string[];
+};
+
+export type CompanyAutomationLearningRecord = {
+  id: string;
+  companySlug: string;
+  kind: CompanyAutomationLearningKind;
+  title: string;
+  summary: string;
+  confidence: number;
+  priority: ExecutionTrackPriority;
+  evidence: string[];
+  recommendedAction?: string;
+  sourceRunId?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CompanyAutomationExperiment = {
+  id: string;
+  companySlug: string;
+  linkedActionId: string;
+  title: string;
+  channel?: string;
+  hypothesis: string;
+  primaryMetric: string;
+  variants: string[];
+  status: CompanyAutomationExperimentStatus;
+  sourceScorecardId?: string;
+  baselineMetricValue?: number;
+  successCriteria?: string;
+  observationWindowDays?: number;
+  confidence?: number;
+  sourceRunId?: string;
+  lastEvaluatedAt?: string;
+  winningVariant?: string;
+  nextAction?: string;
+  createdAt: string;
+};
+
+export type CompanyAutomationExperimentResult = {
+  id: string;
+  companySlug: string;
+  experimentId: string;
+  status: CompanyAutomationExperimentStatus;
+  summary: string;
+  winningVariant?: string;
+  observedMetrics: Array<{
+    label: string;
+    value: string;
+  }>;
+  createdAt: string;
+};
+
+export type CompanyAutomationRun = {
+  id: string;
+  companySlug: string;
+  trigger: CompanyAutomationTrigger;
+  state: CompanyAutomationState;
+  startedAt: string;
+  finishedAt?: string;
+  diagnostics: CompanyAutomationDiagnosticFinding[];
+  opportunities: CompanyAutomationOpportunity[];
+  actions: CompanyAutomationAction[];
+  jobs: CompanyAutomationJob[];
+  approvals: CompanyAutomationApprovalRequest[];
+  policyDecisions: CompanyAutomationPolicyDecision[];
+  outcomes: CompanyAutomationOutcome[];
+  learningRecords: CompanyAutomationLearningRecord[];
+  experiments: CompanyAutomationExperiment[];
+  experimentResults: CompanyAutomationExperimentResult[];
+  cmoDecision?: CompanyCmoStrategicDecision;
+  metrics: CompanyAutomationRunMetrics;
+  summary: string;
+  auditReferences: string[];
+  nextSuggestedRunAt?: string;
+};
+
+export type CompanyAutomationQueueItem = {
+  id: string;
+  companySlug: string;
+  kind: CompanyAutomationQueueKind;
+  status: CompanyAutomationQueueStatus;
+  sourceRunId: string;
+  trigger: CompanyAutomationTrigger;
+  actor: string;
+  reason: string;
+  idempotencyKey?: string;
+  attemptCount: number;
+  maxAttempts: number;
+  availableAt: string;
+  lockedAt?: string;
+  leaseExpiresAt?: string;
+  processingOwner?: string;
+  lastError?: string;
+  metadata?: CompanyAutomationQueueMetadata;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CompanyAutomationDeadLetterItem = {
+  id: string;
+  companySlug: string;
+  sourceQueueItemId: string;
+  sourceRunId: string;
+  kind: CompanyAutomationQueueKind;
+  reason: string;
+  lastError: string;
+  attemptCount: number;
+  createdAt: string;
+  deadLetteredAt: string;
+};
+
+export type CompanyAutomationRuntimeHealth = {
+  companySlug: string;
+  queuedRetries: number;
+  runningRetries: number;
+  waitingRetries: number;
+  queuedRuns: number;
+  runningRuns: number;
+  waitingRuns: number;
+  deadLetters: number;
+  activeExecutionIntents: number;
+  failedExecutionIntents: number;
+  timedOutExecutionIntents: number;
+  openCircuitBreakers: number;
+  halfOpenCircuitBreakers: number;
+  stalledQueueItems?: number;
+  overdueExecutionIntents?: number;
+  oldestQueuedAt?: string;
+  healthScore?: number;
+  status?: HealthState;
+  nextRetryAt?: string;
+  nextRunAt?: string;
+  latestDeadLetterAt?: string;
+};
+
+export type CompanyAutomationControlTowerActionBreakdown = {
+  actionType: CompanyAutomationActionType;
+  totalJobs: number;
+  autoExecuteCount: number;
+  approvalCount: number;
+  policyReviewCount: number;
+  blockedCount: number;
+  completedCount: number;
+  failedCount: number;
+  averageExecutionLatencyMs: number;
+};
+
+export type CompanyAutomationControlTowerExecutorBreakdown = {
+  executor: string;
+  totalOutcomes: number;
+  completedCount: number;
+  blockedCount: number;
+  failedCount: number;
+  timedOutCount: number;
+  averageExecutionLatencyMs: number;
+};
+
+export type CompanyAutomationControlTowerRecentRun = {
+  runId: string;
+  triggerType: CompanyAutomationTriggerType;
+  startedAt: string;
+  finishedAt?: string;
+  status: "completed" | "failed" | "running";
+  dominantConstraint?: CompanyCmoStrategicDecision["dominantConstraint"];
+  durationMs: number;
+  decisionLatencyMs: number;
+  executionLatencyMs: number;
+  totalJobs: number;
+  autoExecutedJobs: number;
+  failedJobs: number;
+  blockedJobs: number;
+  approvalPendingJobs: number;
+  summary: string;
+};
+
+export type CompanyAutomationControlTowerDeadLetter = {
+  id: string;
+  kind: CompanyAutomationQueueKind;
+  reason: string;
+  lastError: string;
+  attemptCount: number;
+  deadLetteredAt: string;
+  replayHint: string;
+};
+
+export type CompanyAutomationControlTowerIntent = {
+  id: string;
+  jobId: string;
+  connectorKey: string;
+  executorKey: string;
+  status: CompanyExecutionIntentStatus;
+  attemptCount: number;
+  correlationId: string;
+  startedAt?: string;
+  finishedAt?: string;
+  updatedAt: string;
+  timeoutMs: number;
+  lastError?: string;
+};
+
+export type CompanyAutomationControlTowerBreaker = {
+  connectorKey: string;
+  state: CompanyConnectorCircuitBreakerState;
+  failureCount: number;
+  successCount: number;
+  threshold: number;
+  nextAttemptAt?: string;
+  lastFailureAt?: string;
+  lastSuccessAt?: string;
+  lastError?: string;
+};
+
+export type CompanyAutomationObservabilityMetric = {
+  name: string;
+  description: string;
+  unit: "count" | "ratio" | "milliseconds" | "score";
+  value: number;
+  labels?: Record<string, string>;
+};
+
+export type CompanyAutomationObservabilityExport = {
+  companySlug: string;
+  generatedAt: string;
+  metrics: CompanyAutomationObservabilityMetric[];
+};
+
+export type CompanyAutomationObservabilitySinkFormat = "json" | "prometheus";
+export type CompanyAutomationObservabilityDeliveryDirection = "outbound" | "inbound";
+export type CompanyAutomationObservabilityDeliveryStatus = "delivered" | "failed" | "received";
+export type CompanyAutomationObservabilityDeliverySink = "webhook" | "collector" | "forwarder";
+
+export type CompanyAutomationObservabilityDeliveryRecord = {
+  id: string;
+  companySlug: string;
+  direction: CompanyAutomationObservabilityDeliveryDirection;
+  sink: CompanyAutomationObservabilityDeliverySink;
+  format: CompanyAutomationObservabilitySinkFormat;
+  status: CompanyAutomationObservabilityDeliveryStatus;
+  metricCount: number;
+  generatedAt: string;
+  createdAt: string;
+  deliveredAt?: string;
+  endpoint?: string;
+  responseStatus?: number;
+  error?: string;
+};
+
+export type CompanyAutomationObservabilityChannelHealth = {
+  mode: "disabled" | "direct_webhook" | "collector_forwarder" | "hybrid";
+  configured: boolean;
+  targetHost?: string;
+  recentDeliveries: number;
+  successfulDeliveries: number;
+  failedDeliveries: number;
+  receivedDeliveries: number;
+  lastDeliveredAt?: string;
+  lastReceivedAt?: string;
+  lastFailureAt?: string;
+  health: HealthState;
+};
+
+export type CompanyAutomationWorkerHeartbeatStatus = "starting" | "running" | "idle" | "error";
+
+export type CompanyAutomationWorkerHeartbeat = {
+  id: string;
+  workerId: string;
+  companySlug?: string;
+  status: CompanyAutomationWorkerHeartbeatStatus;
+  executionPlane: "inline" | "external";
+  storeProvider: string;
+  startedAt: string;
+  lastSeenAt: string;
+  intervalMs: number;
+  processed: number;
+  completed: number;
+  requeued: number;
+  deadLettered: number;
+  lastCompletedRunId?: string;
+  lastError?: string;
+  metadata?: Record<string, string>;
+};
+
+export type CompanyAutomationWorkerHealth = {
+  status: HealthState;
+  expectedMode: "inline" | "external";
+  activeWorkers: number;
+  staleWorkers: number;
+  latestHeartbeatAt?: string;
+  latestErrorAt?: string;
+  latestError?: string;
+  workers: CompanyAutomationWorkerHeartbeat[];
+};
+
+export type CompanyAutomationControlTowerSummary = {
+  companySlug: string;
+  totals: {
+    runs: number;
+    completedRuns: number;
+    failedRuns: number;
+    queuedItems: number;
+    deadLetters: number;
+  };
+  health: {
+    failureRate: number;
+    averageDurationMs: number;
+    averageDecisionLatencyMs: number;
+    averageExecutionLatencyMs: number;
+    longestExecutionLatencyMs: number;
+    autoExecutionRate: number;
+    approvalRate: number;
+    blockRate: number;
+    failedExecutionRate: number;
+    timedOutExecutionRate: number;
+    outcomeCoverageRate: number;
+    deadLetterRate: number;
+    experimentWinRate: number;
+    experimentLossRate: number;
+    connectorHealthScore: number;
+    trustScore: number;
+    runtimeHealthScore: number;
+    runtimeStatus: HealthState;
+    autoExecutedJobs: number;
+    approvalPendingJobs: number;
+    timedOutJobs: number;
+    blockedByCircuitBreaker: number;
+  };
+  queuePressure: {
+    queuedRetries: number;
+    runningRetries: number;
+    waitingRetries: number;
+    queuedRuns: number;
+    runningRuns: number;
+    waitingRuns: number;
+    activeExecutionIntents: number;
+    openCircuitBreakers: number;
+    halfOpenCircuitBreakers: number;
+    stalledQueueItems: number;
+    overdueExecutionIntents: number;
+    oldestQueuedAt?: string;
+    nextRetryAt?: string;
+    nextRunAt?: string;
+  };
+  latest: {
+    lastRunAt?: string;
+    lastSuccessfulRunAt?: string;
+    lastFailedRunAt?: string;
+    latestRunId?: string;
+    latestFailureReason?: string;
+  };
+  autonomyDistribution: Array<{
+    mode: CompanyAutomationApprovalMode;
+    count: number;
+  }>;
+  executionIntentStatusBreakdown: Array<{
+    status: CompanyExecutionIntentStatus;
+    count: number;
+  }>;
+  topExecutors: Array<{
+    executor: string;
+    count: number;
+  }>;
+  executorBreakdown: CompanyAutomationControlTowerExecutorBreakdown[];
+  actionBreakdown: CompanyAutomationControlTowerActionBreakdown[];
+  dominantConstraints: Array<{
+    constraint: CompanyCmoStrategicDecision["dominantConstraint"];
+    count: number;
+  }>;
+  topFailures: Array<{
+    reason: string;
+    count: number;
+  }>;
+  recentRuns: CompanyAutomationControlTowerRecentRun[];
+  recentDeadLetters: CompanyAutomationControlTowerDeadLetter[];
+  recentExecutionIntents: CompanyAutomationControlTowerIntent[];
+  connectorBreakers: CompanyAutomationControlTowerBreaker[];
+  observabilityChannel: CompanyAutomationObservabilityChannelHealth;
+  workerHealth: CompanyAutomationWorkerHealth;
+  observabilityExport?: CompanyAutomationObservabilityExport;
+};
+
+export type LearningValidityScope = {
+  channel: string;
+  targetMetric: string;
+  observedWindow: "7d" | "28d";
+  tenantOnly: boolean;
+};
+
+export type LearningFailureMemory = {
+  count: number;
+  lastFailureAt?: string;
+  lastFailureReason?: string;
+};
+
+export type LearningStatisticalSummary = {
+  sampleSize: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  lossRate: number;
+  posteriorMean: number;
+  credibleInterval: {
+    lower: number;
+    upper: number;
+  };
+  evidenceStrength: LearningEvidenceStrength;
+  minimumSampleSize: number;
 };
 
 export type CompanyKeywordStrategy = {
@@ -812,7 +1554,149 @@ export type CompanyOptimizationExperiment = {
   primaryMetric: string;
   variants: string[];
   status: OptimizationExperimentStatus;
+  sourceScorecardId?: string;
+  baselineMetricValue?: number;
+  successCriteria: string;
+  observationWindowDays: number;
+  confidence: number;
+  sourceRunId?: string;
+  lastEvaluatedAt?: string;
+  winningVariant?: string;
   nextAction: string;
+};
+
+export type CompanyExperimentOutcome = {
+  id: string;
+  companySlug: string;
+  learningBoundary: LearningBoundary;
+  shareability: Exclude<LearningShareability, "shared">;
+  version: number;
+  confidenceState: LearningConfidenceState;
+  validFrom: string;
+  validUntil?: string;
+  validityScope: LearningValidityScope;
+  experimentId: string;
+  channel: string;
+  title: string;
+  hypothesis: string;
+  targetMetric: string;
+  baselineValue?: number;
+  observedValue?: number;
+  observedWindow: "7d" | "28d";
+  status: ExperimentOutcomeStatus;
+  successCriteria: string;
+  winningVariant?: string;
+  confidenceDelta: number;
+  statisticalSummary?: LearningStatisticalSummary;
+  reuseRecommendation?: string;
+  failureNote?: string;
+  sourceRunId?: string;
+  sourceCampaignBriefId?: string;
+  sourceCampaignBriefVersion?: number;
+  evidence: string[];
+  generatedAt: string;
+  updatedAt: string;
+};
+
+export type CompanyLearningPlaybook = {
+  id: string;
+  companySlug: string;
+  learningBoundary: LearningBoundary;
+  shareability: LearningShareability;
+  version: number;
+  confidenceState: LearningConfidenceState;
+  validFrom: string;
+  validUntil?: string;
+  validityScope: LearningValidityScope;
+  failureMemory: LearningFailureMemory;
+  channel: string;
+  title: string;
+  summary: string;
+  status: LearningPlaybookStatus;
+  confidence: number;
+  statisticalSummary?: LearningStatisticalSummary;
+  winCount: number;
+  lossCount: number;
+  sourceExperimentId?: string;
+  sourceRunId?: string;
+  recommendedAction: string;
+  reuseGuidance: string[];
+  evidence: string[];
+  createdAt: string;
+  updatedAt: string;
+  lastValidatedAt?: string;
+};
+
+export type CrossTenantLearningPlaybook = {
+  id: string;
+  learningBoundary: Extract<LearningBoundary, "cross_tenant_safe">;
+  shareability: Extract<LearningShareability, "shared">;
+  version: number;
+  confidenceState: LearningConfidenceState;
+  validFrom: string;
+  validUntil?: string;
+  validityScope: LearningValidityScope;
+  failureMemory: LearningFailureMemory;
+  channel: string;
+  title: string;
+  summary: string;
+  status: LearningPlaybookStatus;
+  confidence: number;
+  statisticalSummary?: LearningStatisticalSummary;
+  sourceTenantCount: number;
+  sourcePlaybookCount: number;
+  winCount: number;
+  lossCount: number;
+  recommendedAction: string;
+  reuseGuidance: string[];
+  evidence: string[];
+  createdAt: string;
+  updatedAt: string;
+  lastValidatedAt?: string;
+};
+
+export type CompanyCmoDelegatedModule =
+  | "strategy"
+  | "ads"
+  | "social-runtime"
+  | "conversion-runtime"
+  | "crm"
+  | "site-ops"
+  | "data-ops"
+  | "governance"
+  | "studio";
+
+export type CompanyCmoStrategicDecision = {
+  id: string;
+  companySlug: string;
+  dominantConstraint:
+    | "acquisition"
+    | "conversion"
+    | "content"
+    | "operations"
+    | "retention"
+    | "tracking"
+    | "governance";
+  weeklyThesis: string;
+  primaryBet: string;
+  supportingBets: string[];
+  delegatedModules: CompanyCmoDelegatedModule[];
+  focusMetric: string;
+  confidence: number;
+  rationale: string;
+  winningChannels: Array<{
+    channel: string;
+    platform?: PlatformId | SocialPlatformId;
+    reason: string;
+  }>;
+  losingChannels: Array<{
+    channel: string;
+    platform?: PlatformId | SocialPlatformId;
+    reason: string;
+  }>;
+  scorecards: CompanyOptimizationScorecard[];
+  recommendedExperiments: CompanyOptimizationExperiment[];
+  createdAt: string;
 };
 
 export type SocialPlatformConnection = {
@@ -860,6 +1744,8 @@ export type ScheduledSocialPost = {
   sourceAssetId?: string;
   sourceAssetVersionId?: string;
   sourceExperimentId?: string;
+  sourceCampaignBriefId?: string;
+  sourceCampaignBriefVersion?: number;
   variantLabel?: string;
   status: ScheduledSocialPostStatus;
   requestedBy: string;
@@ -888,6 +1774,8 @@ export type SocialAdDraft = {
   sourceAssetId?: string;
   sourceAssetVersionId?: string;
   sourceExperimentId?: string;
+  sourceCampaignBriefId?: string;
+  sourceCampaignBriefVersion?: number;
   variantLabel?: string;
   scheduledStart: string;
   status: SocialAdDraftStatus;
@@ -952,6 +1840,8 @@ export type SocialRuntimeTask = {
   sourceItemId?: string;
   targetId?: string;
   sourceExperimentId?: string;
+  sourceCampaignBriefId?: string;
+  sourceCampaignBriefVersion?: number;
   variantLabel?: string;
   attemptCount: number;
   lastAttemptAt?: string;
@@ -979,6 +1869,8 @@ export type SocialExecutionLog = {
   actor: string;
   externalRef?: string;
   sourceExperimentId?: string;
+  sourceCampaignBriefId?: string;
+  sourceCampaignBriefVersion?: number;
   variantLabel?: string;
   metrics: SocialExecutionMetric[];
 };
@@ -1069,6 +1961,9 @@ export type CompanyWorkspace = {
   operationalInbox: OperationalInboxItem[];
   operationalAlerts: CompanyOperationalAlert[];
   agentLearnings: CompanyAgentLearning[];
+  experimentOutcomes: CompanyExperimentOutcome[];
+  learningPlaybooks: CompanyLearningPlaybook[];
+  sharedLearningPlaybooks?: CrossTenantLearningPlaybook[];
   schedulerProfile: CompanySchedulerProfile;
   schedulerJobs: CompanySchedulerJob[];
   paymentProfile: CompanyPaymentProfile;
@@ -1087,6 +1982,12 @@ export type CompanyWorkspace = {
   snapshots: MetricSnapshot[];
   reports: CompanyGeneratedReport[];
   executionPlans: CompanyExecutionPlan[];
+  automationRuns: CompanyAutomationRun[];
+  automationQueue: CompanyAutomationQueueItem[];
+  automationDeadLetters: CompanyAutomationDeadLetterItem[];
+  executionIntents: CompanyExecutionIntent[];
+  connectorCircuitBreakers: CompanyConnectorCircuitBreaker[];
+  automationRuntimeHealth: CompanyAutomationRuntimeHealth;
   audit: ConnectorAuditEvent[];
 };
 

@@ -6,10 +6,20 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "node --import tsx --test src/**/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run lint && npm test && npm run typecheck",
+    "agent:worker": "node --import tsx src/scripts/agent-worker.ts",
+    "agent:worker:once": "node --import tsx src/scripts/agent-worker.ts --once",
+    "agent:worker:supervised": "node --import tsx src/scripts/agent-worker-supervisor.ts",
+    "agent:store:check": "node --import tsx src/scripts/check-managed-automation-store.ts",
+    "agent:observability:check": "node --import tsx src/scripts/check-observability-collector.ts",
+    "agent:production:check": "node --import tsx src/scripts/check-agent-production-gates.ts"
   },
   "dependencies": {
-    "next": "^16.1.6",
+    "next": "^16.2.3",
+    "pg": "^8.20.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
@@ -17,11 +27,13 @@
     "@eslint/eslintrc": "^3.3.1",
     "@tailwindcss/postcss": "^4.1.13",
     "@types/node": "^24.6.0",
+    "@types/pg": "^8.20.0",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "eslint": "^9.38.0",
-    "eslint-config-next": "^16.1.6",
+    "eslint-config-next": "^16.2.3",
     "tailwindcss": "^4.1.13",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }
 }

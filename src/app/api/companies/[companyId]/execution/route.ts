@@ -11,6 +11,7 @@ import { recordCompanyAuditEvent } from "@/lib/governance";
 import { syncCompanyGoogleDataOps } from "@/lib/google-data";
 import { syncCompanyLearningMemory } from "@/lib/learning";
 import { deliverOperationalAlertEmails } from "@/lib/operational-alerts";
+import { requireCompanyPermission } from "@/lib/rbac";
 import { getSessionFromCookies } from "@/lib/session";
 import { getUserProfessionalProfile } from "@/lib/user-profiles";
 
@@ -58,6 +59,25 @@ export async function POST(
 
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "generate-plan");
+  const requiredPermission =
+    intent === "apply-auto"
+      ? "execution:apply"
+      : intent === "sync-learning"
+        ? "agent:learn"
+        : "execution:generate";
+  const permissionCheck = requireCompanyPermission({
+    companySlug: workspace.company.slug,
+    profile: professionalProfile,
+    permission: requiredPermission,
+    actor: session.email
+  });
+
+  if (!permissionCheck.allowed) {
+    return NextResponse.json(
+      { error: permissionCheck.message, auditId: permissionCheck.auditId },
+      { status: 403 }
+    );
+  }
 
   if (intent === "sync-learning") {
     syncCompanyLearningMemory({

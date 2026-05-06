@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 const SESSION_COOKIE = "super_agencia_session";
 const GOOGLE_STATE_COOKIE = "super_agencia_google_state";
@@ -25,17 +25,61 @@ function fromBase64Url(value: string) {
   return Buffer.from(value, "base64url").toString("utf8");
 }
 
-function getSessionSecret() {
-  return process.env.AUTH_SESSION_SECRET || "dev-super-agencia-secret";
+function getSessionSecretFromEnv() {
+  const raw = process.env.AUTH_SESSION_SECRET?.trim();
+  return raw && raw.length > 0 ? raw : null;
 }
 
-function signValue(value: string) {
-  return createHmac("sha256", getSessionSecret()).update(value).digest("base64url");
+function isProductionEnvironment() {
+  return process.env.NODE_ENV === "production";
+}
+
+function buildDevelopmentSessionSecret() {
+  return createHash("sha256")
+    .update(
+      [
+        "agent-lion-dev-session",
+        process.cwd(),
+        process.env.USERNAME ?? "",
+        process.env.COMPUTERNAME ?? "",
+        process.version
+      ].join("|")
+    )
+    .digest("base64url");
+}
+
+function getSessionSecret(mode: "read" | "write") {
+  const explicitSecret = getSessionSecretFromEnv();
+  if (explicitSecret) {
+    return explicitSecret;
+  }
+
+  if (isProductionEnvironment()) {
+    if (mode === "write") {
+      throw new Error("AUTH_SESSION_SECRET ausente");
+    }
+
+    return null;
+  }
+
+  return buildDevelopmentSessionSecret();
+}
+
+function signValue(value: string, mode: "read" | "write") {
+  const secret = getSessionSecret(mode);
+  if (!secret) {
+    return null;
+  }
+
+  return createHmac("sha256", secret).update(value).digest("base64url");
 }
 
 function createSignedPayload<T>(value: T) {
   const payload = toBase64Url(JSON.stringify(value));
-  const signature = signValue(payload);
+  const signature = signValue(payload, "write");
+  if (!signature) {
+    throw new Error("AUTH_SESSION_SECRET ausente");
+  }
   return `${payload}.${signature}`;
 }
 
@@ -45,7 +89,8 @@ function readSignedPayload<T>(token: string | undefined): T | null {
   const [payload, signature] = token.split(".");
   if (!payload || !signature) return null;
 
-  const expected = signValue(payload);
+  const expected = signValue(payload, "read");
+  if (!expected) return null;
   const signatureBuffer = Buffer.from(signature);
   const expectedBuffer = Buffer.from(expected);
 
@@ -93,4 +138,8 @@ export function createSignedCookieValue<T>(value: T) {
 
 export function readSignedCookieValue<T>(token: string | undefined) {
   return readSignedPayload<T>(token);
+}
+
+export function isSessionSecretExplicitlyConfigured() {
+  return Boolean(getSessionSecretFromEnv());
 }

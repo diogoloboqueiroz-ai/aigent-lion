@@ -4318,6 +4318,8 @@ function buildLog(input: {
     actor: input.actor,
     externalRef: input.externalRef,
     sourceExperimentId: input.task.sourceExperimentId,
+    sourceCampaignBriefId: input.task.sourceCampaignBriefId,
+    sourceCampaignBriefVersion: input.task.sourceCampaignBriefVersion,
     variantLabel: input.task.variantLabel,
     metrics: input.metrics ?? []
   };

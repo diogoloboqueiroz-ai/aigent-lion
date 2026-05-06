@@ -3,6 +3,7 @@ import {
   upsertStoredCompanySiteCmsConnection,
   upsertStoredCompanySiteOpsProfile
 } from "@/lib/company-vault";
+import { readSanitizedResponseText } from "@/core/observability/redaction";
 import type { CompanySiteOpsProfile } from "@/lib/domain";
 
 type WordPressUserResponse = {
@@ -94,7 +95,9 @@ export async function publishLandingPageToWordPress(input: PublishWordPressLandi
   });
 
   if (!response.ok) {
-    throw new Error((await response.text()) || "Falha ao publicar landing page no WordPress.");
+    throw new Error(
+      await readSanitizedResponseText(response, "Falha ao publicar landing page no WordPress.")
+    );
   }
 
   const payload = (await response.json()) as WordPressPageResponse;
@@ -130,7 +133,9 @@ async function fetchWordPressCurrentUser(siteUrl: string, username: string, appP
   });
 
   if (!response.ok) {
-    throw new Error((await response.text()) || "Falha ao validar credenciais WordPress.");
+    throw new Error(
+      await readSanitizedResponseText(response, "Falha ao validar credenciais WordPress.")
+    );
   }
 
   return (await response.json()) as WordPressUserResponse;

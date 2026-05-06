@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readSanitizedResponseText, sanitizeErrorMessage } from "@/core/observability/redaction";
 import {
   getStoredCompanyConversionEvents,
   getStoredSocialPlatformBinding,
@@ -230,7 +231,7 @@ async function dispatchDestination(input: {
     } catch (error) {
       return markBlockedEvent(
         existing ?? baseEvent,
-        error instanceof Error ? error.message : "GOOGLE_ADS_DEVELOPER_TOKEN ausente."
+        sanitizeErrorMessage(error, "GOOGLE_ADS_DEVELOPER_TOKEN ausente.")
       );
     }
 
@@ -240,7 +241,7 @@ async function dispatchDestination(input: {
     } catch (error) {
       return markBlockedEvent(
         existing ?? baseEvent,
-        error instanceof Error ? error.message : "Conexao Google Ads nao esta pronta."
+        sanitizeErrorMessage(error, "Conexao Google Ads nao esta pronta.")
       );
     }
 
@@ -269,7 +270,7 @@ async function dispatchDestination(input: {
   } catch (error) {
     return markFailedEvent(
       existing ?? baseEvent,
-      error instanceof Error ? error.message : "Falha inesperada ao disparar evento de conversao."
+      sanitizeErrorMessage(error, "Falha inesperada ao disparar evento de conversao.")
     );
   }
 }
@@ -409,7 +410,7 @@ async function sendGa4Event(input: {
   );
 
   if (!response.ok) {
-    throw new Error((await response.text()) || "Falha ao enviar evento para o GA4.");
+    throw new Error(await readSanitizedResponseText(response, "Falha ao enviar evento para o GA4."));
   }
 }
 
@@ -466,7 +467,7 @@ async function sendMetaConversionEvent(input: {
   );
 
   if (!response.ok) {
-    throw new Error((await response.text()) || "Falha ao enviar evento para o Meta CAPI.");
+    throw new Error(await readSanitizedResponseText(response, "Falha ao enviar evento para o Meta CAPI."));
   }
 }
 
@@ -566,7 +567,7 @@ async function uploadGoogleAdsClickConversion(input: {
     }
   );
 
-  const rawText = await response.text();
+  const rawText = await readSanitizedResponseText(response, "");
   const payload = rawText
     ? (JSON.parse(rawText) as {
         jobId?: string;

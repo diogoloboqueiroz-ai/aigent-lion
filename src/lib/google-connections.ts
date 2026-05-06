@@ -1,4 +1,5 @@
 import type { PlatformId } from "@/lib/domain";
+import { readSanitizedResponseText } from "@/core/observability/redaction";
 import { getGoogleClientId, getGoogleClientSecret } from "@/lib/google-auth";
 
 type GooglePlatformId = Exclude<PlatformId, "meta">;
@@ -81,7 +82,12 @@ export async function exchangeGoogleConnectionCode(origin: string, code: string)
   });
 
   if (!response.ok) {
-    throw new Error(`Falha ao trocar codigo Google OAuth: ${await response.text()}`);
+    throw new Error(
+      `Falha ao trocar codigo Google OAuth: ${await readSanitizedResponseText(
+        response,
+        "Google OAuth rejeitou a troca do codigo."
+      )}`
+    );
   }
 
   return (await response.json()) as {
