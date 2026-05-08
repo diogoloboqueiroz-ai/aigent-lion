@@ -1,6 +1,11 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import {
+  companyRouteJson,
+  requireCompanyRouteAccess,
+  requireResolvedCompanyRoutePermission
+} from "@/lib/api/company-route-auth";
+import {
   getStoredScheduledSocialPosts,
   getStoredSocialAdDrafts,
   upsertStoredSocialPlatformBinding,
@@ -25,23 +30,21 @@ export async function GET(
   context: { params: Promise<{ companyId: string }> }
 ) {
   const { companyId } = await context.params;
-  const workspace = getCompanyWorkspace(companyId);
+  const access = await requireCompanyRouteAccess({
+    companyId,
+    permission: "agent:decide"
+  });
 
-  if (!workspace) {
-    return NextResponse.json({ error: "Empresa nao encontrada" }, { status: 404 });
+  if (!access.ok) {
+    return access.response;
   }
 
-  return NextResponse.json(
+  return companyRouteJson(
     {
-      summary: workspace.socialRuntime,
-      bindings: workspace.socialBindings,
-      tasks: workspace.socialRuntimeTasks,
-      logs: workspace.socialExecutionLogs
-    },
-    {
-      headers: {
-        "Cache-Control": "no-store"
-      }
+      summary: access.workspace.socialRuntime,
+      bindings: access.workspace.socialBindings,
+      tasks: access.workspace.socialRuntimeTasks,
+      logs: access.workspace.socialExecutionLogs
     }
   );
 }
@@ -67,6 +70,17 @@ export async function POST(
 
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "save-binding");
+  const forbidden = requireResolvedCompanyRoutePermission({
+    workspace,
+    profile: professionalProfile,
+    session,
+    permission: intent === "save-binding" ? "agent:decide" : "execution:apply"
+  });
+
+  if (forbidden) {
+    return forbidden;
+  }
+
   const runtimeBaseUrl = new URL(`/empresas/${companyId}/social/runtime`, request.url);
 
   if (intent === "save-binding") {

@@ -14,6 +14,7 @@ import {
 import { sanitizeErrorMessage } from "@/core/observability/redaction";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { companyRouteJson, requireCompanyRouteAccess } from "@/lib/api/company-route-auth";
 import { getCompanyWorkspace } from "@/lib/connectors";
 import { syncCompanyLeadsToCrm } from "@/lib/crm";
 import { dispatchQueuedLeadConversionSignals } from "@/lib/conversion-runtime";
@@ -43,15 +44,19 @@ export async function GET(
   context: { params: Promise<{ companyId: string }> }
 ) {
   const { companyId } = await context.params;
-  const workspace = getCompanyWorkspace(companyId);
+  const access = await requireCompanyRouteAccess({
+    companyId,
+    permission: "scheduler:manage"
+  });
 
-  if (!workspace) {
-    return NextResponse.json({ error: "Empresa nao encontrada" }, { status: 404 });
+  if (!access.ok) {
+    return access.response;
   }
+  const { workspace } = access;
 
-  const runtime = await getAgentRuntimeSnapshot(workspace.company.slug);
+  const runtime = await getAgentRuntimeSnapshot(workspace.company.slug, access.profile);
 
-  return NextResponse.json(
+  return companyRouteJson(
     {
       schedulerProfile: workspace.schedulerProfile,
       schedulerJobs: workspace.schedulerJobs,
@@ -60,11 +65,6 @@ export async function GET(
       automationQueue: runtime?.automationQueue ?? workspace.automationQueue,
       automationDeadLetters: runtime?.automationDeadLetters ?? workspace.automationDeadLetters,
       automationRuntimeHealth: runtime?.automationRuntimeHealth ?? workspace.automationRuntimeHealth
-    },
-    {
-      headers: {
-        "Cache-Control": "no-store"
-      }
     }
   );
 }

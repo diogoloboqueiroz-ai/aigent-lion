@@ -15,6 +15,7 @@ import {
   upsertStoredScheduledSocialPost
 } from "@/lib/company-vault";
 import { recordCompanyAuditEvent } from "@/lib/governance";
+import { requireCompanyPermission } from "@/lib/rbac";
 import { buildScheduledSocialPostFromPublishingRequest } from "@/lib/social-ops";
 import { getSessionFromCookies } from "@/lib/session";
 import { getUserProfessionalProfile } from "@/lib/user-profiles";
@@ -36,6 +37,20 @@ export async function POST(
 
   if (!workspace) {
     return NextResponse.json({ error: "Empresa nao encontrada" }, { status: 404 });
+  }
+
+  const permissionCheck = requireCompanyPermission({
+    companySlug: workspace.company.slug,
+    profile: professionalProfile,
+    permission: "governance:review",
+    actor: session.email
+  });
+
+  if (!permissionCheck.allowed) {
+    return NextResponse.json(
+      { error: permissionCheck.message, auditId: permissionCheck.auditId },
+      { status: 403 }
+    );
   }
 
   const currentRequest = getCompanyPublishingRequests(workspace.company.slug).find(

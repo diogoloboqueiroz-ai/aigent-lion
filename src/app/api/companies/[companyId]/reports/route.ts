@@ -1,5 +1,10 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import {
+  companyRouteJson,
+  requireCompanyRouteAccess,
+  requireResolvedCompanyRoutePermission
+} from "@/lib/api/company-route-auth";
 import { getCompanyWorkspace } from "@/lib/connectors";
 import { generateCompanyReport, saveGeneratedCompanyReport } from "@/lib/reports";
 import { getSessionFromCookies } from "@/lib/session";
@@ -10,20 +15,18 @@ export async function GET(
   context: { params: Promise<{ companyId: string }> }
 ) {
   const { companyId } = await context.params;
-  const workspace = getCompanyWorkspace(companyId);
+  const access = await requireCompanyRouteAccess({
+    companyId,
+    permission: "agent:decide"
+  });
 
-  if (!workspace) {
-    return NextResponse.json({ error: "Empresa nao encontrada" }, { status: 404 });
+  if (!access.ok) {
+    return access.response;
   }
 
-  return NextResponse.json(
+  return companyRouteJson(
     {
-      reports: workspace.reports
-    },
-    {
-      headers: {
-        "Cache-Control": "no-store"
-      }
+      reports: access.workspace.reports
     }
   );
 }
@@ -45,6 +48,16 @@ export async function POST(
 
   if (!workspace) {
     return NextResponse.json({ error: "Empresa nao encontrada" }, { status: 404 });
+  }
+  const forbidden = requireResolvedCompanyRoutePermission({
+    workspace,
+    profile: professionalProfile,
+    session,
+    permission: "execution:generate"
+  });
+
+  if (forbidden) {
+    return forbidden;
   }
 
   const formData = await request.formData();

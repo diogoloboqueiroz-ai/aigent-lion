@@ -1,5 +1,10 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import {
+  companyRouteJson,
+  requireCompanyRouteAccess,
+  requireResolvedCompanyRoutePermission
+} from "@/lib/api/company-route-auth";
 import { upsertStoredCompanyDataOpsProfile } from "@/lib/company-vault";
 import { getCompanyWorkspace } from "@/lib/connectors";
 import { parseDataOpsForm } from "@/lib/data-ops";
@@ -12,20 +17,18 @@ export async function GET(
   context: { params: Promise<{ companyId: string }> }
 ) {
   const { companyId } = await context.params;
-  const workspace = getCompanyWorkspace(companyId);
+  const access = await requireCompanyRouteAccess({
+    companyId,
+    permission: "agent:decide"
+  });
 
-  if (!workspace) {
-    return NextResponse.json({ error: "Empresa nao encontrada" }, { status: 404 });
+  if (!access.ok) {
+    return access.response;
   }
 
-  return NextResponse.json(
+  return companyRouteJson(
     {
-      dataOps: workspace.dataOpsProfile
-    },
-    {
-      headers: {
-        "Cache-Control": "no-store"
-      }
+      dataOps: access.workspace.dataOpsProfile
     }
   );
 }
@@ -50,8 +53,19 @@ export async function POST(
   }
 
   const formData = await request.formData();
+  const intent = String(formData.get("intent") ?? "save-profile");
+  const forbidden = requireResolvedCompanyRoutePermission({
+    workspace,
+    profile: professionalProfile,
+    session,
+    permission: intent === "sync-now" ? "execution:apply" : "agent:decide"
+  });
 
-  if (String(formData.get("intent") ?? "save-profile") === "sync-now") {
+  if (forbidden) {
+    return forbidden;
+  }
+
+  if (intent === "sync-now") {
     const sync = await syncCompanyGoogleDataOps(workspace);
     const search = new URLSearchParams({
       saved: "sync"

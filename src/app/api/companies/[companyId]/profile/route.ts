@@ -1,29 +1,33 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { buildSystemPrompt, getCompanyAgentProfile, parsePlatformList, textareaToList } from "@/lib/agent-profiles";
+import {
+  companyRouteJson,
+  requireCompanyRouteAccess,
+  requireResolvedCompanyRoutePermission
+} from "@/lib/api/company-route-auth";
 import { upsertStoredCompanyProfile } from "@/lib/company-vault";
 import { getCompanyWorkspace } from "@/lib/connectors";
 import { getSessionFromCookies } from "@/lib/session";
+import { getUserProfessionalProfile } from "@/lib/user-profiles";
 
 export async function GET(
   _request: Request,
   context: { params: Promise<{ companyId: string }> }
 ) {
   const { companyId } = await context.params;
-  const workspace = getCompanyWorkspace(companyId);
+  const access = await requireCompanyRouteAccess({
+    companyId,
+    permission: "agent:decide"
+  });
 
-  if (!workspace) {
-    return NextResponse.json({ error: "Empresa nao encontrada" }, { status: 404 });
+  if (!access.ok) {
+    return access.response;
   }
 
-  return NextResponse.json(
+  return companyRouteJson(
     {
-      profile: workspace.agentProfile
-    },
-    {
-      headers: {
-        "Cache-Control": "no-store"
-      }
+      profile: access.workspace.agentProfile
     }
   );
 }
@@ -33,7 +37,6 @@ export async function POST(
   context: { params: Promise<{ companyId: string }> }
 ) {
   const { companyId } = await context.params;
-  const workspace = getCompanyWorkspace(companyId);
   const cookieStore = await cookies();
   const session = getSessionFromCookies(cookieStore);
 
@@ -41,8 +44,21 @@ export async function POST(
     return NextResponse.redirect(new URL(`/?auth=login-required`, request.url));
   }
 
+  const professionalProfile = getUserProfessionalProfile(session);
+  const workspace = getCompanyWorkspace(companyId, professionalProfile);
+
   if (!workspace) {
     return NextResponse.json({ error: "Empresa nao encontrada" }, { status: 404 });
+  }
+  const forbidden = requireResolvedCompanyRoutePermission({
+    workspace,
+    profile: professionalProfile,
+    session,
+    permission: "agent:decide"
+  });
+
+  if (forbidden) {
+    return forbidden;
   }
 
   const formData = await request.formData();

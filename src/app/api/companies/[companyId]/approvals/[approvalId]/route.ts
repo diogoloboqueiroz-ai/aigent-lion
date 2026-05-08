@@ -19,6 +19,7 @@ import {
 } from "@/lib/company-vault";
 import { approvePaymentRequest, denyPaymentRequest } from "@/lib/payments";
 import { recordCompanyAuditEvent } from "@/lib/governance";
+import { requireCompanyPermission } from "@/lib/rbac";
 import {
   buildSocialRuntimeTaskForAd,
   buildSocialRuntimeTaskForPost,
@@ -56,6 +57,22 @@ export async function POST(
 
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "");
+  const requiredPermission = approvalId.startsWith("payreq-")
+    ? "payments:approve"
+    : "governance:review";
+  const permissionCheck = requireCompanyPermission({
+    companySlug: workspace.company.slug,
+    profile: professionalProfile,
+    permission: requiredPermission,
+    actor: session.email
+  });
+
+  if (!permissionCheck.allowed) {
+    return NextResponse.json(
+      { error: permissionCheck.message, auditId: permissionCheck.auditId },
+      { status: 403 }
+    );
+  }
 
   if (approvalId.startsWith("payreq-")) {
     const paymentRequest = getStoredPaymentApprovalRequests(companyId).find((entry) => entry.id === approvalId);

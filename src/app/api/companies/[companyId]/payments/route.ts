@@ -1,5 +1,10 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import {
+  companyRouteJson,
+  requireCompanyRouteAccess,
+  requireResolvedCompanyRoutePermission
+} from "@/lib/api/company-route-auth";
 import { getCompanyWorkspace } from "@/lib/connectors";
 import {
   upsertStoredCompanyPaymentProfile,
@@ -7,27 +12,26 @@ import {
 } from "@/lib/company-vault";
 import { buildPaymentApprovalRequest } from "@/lib/payments";
 import { getSessionFromCookies } from "@/lib/session";
+import { getUserProfessionalProfile } from "@/lib/user-profiles";
 
 export async function GET(
   _request: Request,
   context: { params: Promise<{ companyId: string }> }
 ) {
   const { companyId } = await context.params;
-  const workspace = getCompanyWorkspace(companyId);
+  const access = await requireCompanyRouteAccess({
+    companyId,
+    permission: "payments:approve"
+  });
 
-  if (!workspace) {
-    return NextResponse.json({ error: "Empresa nao encontrada" }, { status: 404 });
+  if (!access.ok) {
+    return access.response;
   }
 
-  return NextResponse.json(
+  return companyRouteJson(
     {
-      paymentProfile: workspace.paymentProfile,
-      paymentRequests: workspace.paymentRequests
-    },
-    {
-      headers: {
-        "Cache-Control": "no-store"
-      }
+      paymentProfile: access.workspace.paymentProfile,
+      paymentRequests: access.workspace.paymentRequests
     }
   );
 }
@@ -37,7 +41,6 @@ export async function POST(
   context: { params: Promise<{ companyId: string }> }
 ) {
   const { companyId } = await context.params;
-  const workspace = getCompanyWorkspace(companyId);
   const cookieStore = await cookies();
   const session = getSessionFromCookies(cookieStore);
 
@@ -45,12 +48,25 @@ export async function POST(
     return NextResponse.redirect(new URL("/?auth=login-required", request.url), { status: 303 });
   }
 
+  const professionalProfile = getUserProfessionalProfile(session);
+  const workspace = getCompanyWorkspace(companyId, professionalProfile);
+
   if (!workspace) {
     return NextResponse.json({ error: "Empresa nao encontrada" }, { status: 404 });
   }
 
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "request");
+  const forbidden = requireResolvedCompanyRoutePermission({
+    workspace,
+    profile: professionalProfile,
+    session,
+    permission: "payments:approve"
+  });
+
+  if (forbidden) {
+    return forbidden;
+  }
 
   if (intent === "save-profile") {
     upsertStoredCompanyPaymentProfile({

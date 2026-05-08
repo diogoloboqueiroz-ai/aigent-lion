@@ -1,5 +1,10 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import {
+  companyRouteJson,
+  requireCompanyRouteAccess,
+  requireResolvedCompanyRoutePermission
+} from "@/lib/api/company-route-auth";
 import { getCompanyWorkspace } from "@/lib/connectors";
 import {
   upsertStoredCompanyCodeWorkspace,
@@ -19,24 +24,23 @@ export async function GET(
   context: { params: Promise<{ companyId: string }> }
 ) {
   const { companyId } = await context.params;
-  const workspace = getCompanyWorkspace(companyId);
+  const access = await requireCompanyRouteAccess({
+    companyId,
+    permission: "agent:decide"
+  });
 
-  if (!workspace) {
-    return NextResponse.json({ error: "Empresa nao encontrada" }, { status: 404 });
+  if (!access.ok) {
+    return access.response;
   }
+  const { workspace } = access;
 
-  return NextResponse.json(
+  return companyRouteJson(
     {
       siteOpsProfile: getCompanySiteOpsProfile(workspace.company),
       trackingCredentials: getCompanyTrackingCredentials(workspace.company.slug),
       engineeringWorkspaces: getCompanyEngineeringWorkspaces(workspace.company),
       technicalRequests: getCompanyTechnicalRequests(workspace.company.slug),
       conversionEvents: workspace.conversionEvents
-    },
-    {
-      headers: {
-        "Cache-Control": "no-store"
-      }
     }
   );
 }
@@ -62,6 +66,20 @@ export async function POST(
 
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "save-workspace");
+  const forbidden = requireResolvedCompanyRoutePermission({
+    workspace,
+    profile: professionalProfile,
+    session,
+    permission:
+      intent === "save-site-ops" || intent === "save-workspace"
+        ? "agent:decide"
+        : "execution:apply"
+  });
+
+  if (forbidden) {
+    return forbidden;
+  }
+
   const siteOpsProfile = getCompanySiteOpsProfile(workspace.company);
 
   if (intent === "save-site-ops") {
