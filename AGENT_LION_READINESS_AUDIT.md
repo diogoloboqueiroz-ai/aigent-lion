@@ -22,6 +22,8 @@ O produto esta pronto para continuar como preview/validacao tecnica, mas ainda n
 | `npm run agent:store:check` | Falhou corretamente | `DATABASE_URL` ausente para schema gerenciado. |
 | `npm run agent:observability:check` | Passou | Collector/check local sem erro de configuracao. |
 | `npm audit --audit-level=moderate` | Falhou | 2 vulnerabilidades moderadas via `next/postcss`; `npm audit fix --force` sugere downgrade perigoso para `next@9.3.3`. |
+| Vercel preview deploy | Passou | Projeto dedicado `aigent-lion` criado/linkado na Vercel e preview publicado. |
+| Vercel smoke via `vercel curl` | Passou | Preview protegido respondeu HTML real da aplicacao. |
 
 ## O que ja esta forte
 
@@ -47,6 +49,7 @@ O produto esta pronto para continuar como preview/validacao tecnica, mas ainda n
 | P1 | Observabilidade | Collector local passa, mas destino externo real ainda precisa ser confirmado. | Configurar webhook/collector externo e validar `controlTower.observabilityChannel.health`. |
 | P1 | Dependencias | `npm audit` aponta 2 moderadas via `next/postcss`. | Aguardar patch compatavel de Next/PostCSS ou atualizar sem `--force`; nao aceitar downgrade automatico. |
 | P1 | Execucao real | Ainda existem adaptadores simulados/fallbacks seguros em execucao low-risk. | Conectar mutacoes reais por conector gradualmente, sempre via policy e audit trail. |
+| P1 | Branding/separacao | A home ainda mostra seed chamada `Ortho Prime`. Nao e o projeto ORTHO.IA, mas pode confundir a separacao entre produtos. | Renomear seeds/demo companies do Aigent Lion para nomes neutros no proximo ciclo. |
 | P2 | Legacy facade | `src/lib/company-vault.ts` esta em 1079 linhas e ainda e usado por rotas/modulos legados. | Continuar drenagem segura de callers legados para storages dedicados. |
 
 ## Dependencia residual do company-vault
@@ -72,9 +75,12 @@ Residuo principal:
 Estado atual:
 
 - Vercel CLI instalado e autenticado o suficiente para listar projetos.
-- Projetos encontrados na conta: `ortho-ia`, `ortho-ai`, `dr-diogo-landing`, `dr-diogo-landing-avmc`.
-- Nenhum projeto Vercel dedicado ao Aigent Lion foi encontrado.
+- Projetos existentes inicialmente na conta: `ortho-ia`, `ortho-ai`, `dr-diogo-landing`, `dr-diogo-landing-avmc`.
+- Projeto dedicado `aigent-lion` foi criado/linkado sem reutilizar nenhum projeto ORTHO.IA.
+- Preview publicado: `https://aigent-lion-bj6snscm7-diogo-lobo-s-projects.vercel.app`.
+- Smoke autenticado via `vercel curl` passou para `/`.
 - Deploy de producao nao deve ser feito em projeto ORTHO.IA ou Dr Diogo.
+- Deploy prebuilt local falhou em Windows por artefato `.vercel/output` com `ENOENT`; deploy remoto via source passou.
 
 Variaveis minimas antes de deploy produtivo:
 
@@ -103,4 +109,4 @@ Checklist recomendado antes de `vercel deploy --prod`:
 
 O Aigent Lion tem base tecnica forte e passou nos checks locais principais. O proximo salto nao e mais criar novas telas ou engines: e fechar o ambiente produtivo real com Vercel dedicado, Postgres gerenciado, secrets, worker externo e observabilidade externa.
 
-Deploy de producao agora, sem essas configuracoes, seria prematuro. Deploy seguro exige primeiro criar/linkar um projeto Vercel exclusivo do Aigent Lion e configurar os gates produtivos.
+Deploy de producao agora, sem essas configuracoes, seria prematuro. Deploy seguro exige configurar os gates produtivos no projeto Vercel exclusivo do Aigent Lion antes de promover o preview para producao.
