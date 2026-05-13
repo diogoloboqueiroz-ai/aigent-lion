@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { readSanitizedResponseText, sanitizeErrorMessage } from "@/core/observability/redaction";
 import {
   getStoredCompanyCrmConnection,
   getStoredCompanyCrmProfile,
@@ -173,7 +174,7 @@ export async function syncLeadToCrm(company: CompanyProfile, profile: CompanyCrm
       const failed = markLeadCrmSyncError(
         lead,
         "hubspot",
-        error instanceof Error ? error.message : "Falha ao sincronizar lead com HubSpot."
+        sanitizeErrorMessage(error, "Falha ao sincronizar lead com HubSpot.")
       );
       upsertStoredCompanyLead(failed);
       return failed;
@@ -320,7 +321,12 @@ async function fetchHubSpotTokenInfo(accessToken: string) {
   });
 
   if (!response.ok) {
-    throw new Error(`Falha ao validar token HubSpot: ${await response.text()}`);
+    throw new Error(
+      `Falha ao validar token HubSpot: ${await readSanitizedResponseText(
+        response,
+        "HubSpot recusou a validacao do token privado."
+      )}`
+    );
   }
 
   return (await response.json()) as HubSpotTokenInfo;
@@ -352,7 +358,7 @@ async function upsertHubSpotContact(accessToken: string, lead: CompanyLead, prof
   });
 
   if (!response.ok) {
-    throw new Error(await response.text() || "Falha ao upsertar contato no HubSpot.");
+    throw new Error(await readSanitizedResponseText(response, "Falha ao upsertar contato no HubSpot."));
   }
 
   const payload = (await response.json()) as HubSpotBatchUpsertResponse;

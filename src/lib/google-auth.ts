@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { readSanitizedResponseText } from "@/core/observability/redaction";
 
 const GOOGLE_LOGIN_SCOPES = ["openid", "email", "profile"];
 
@@ -63,7 +64,12 @@ export async function exchangeGoogleCode(origin: string, code: string) {
   });
 
   if (!response.ok) {
-    throw new Error(`Falha ao trocar codigo Google OAuth: ${await response.text()}`);
+    throw new Error(
+      `Falha ao trocar codigo Google OAuth: ${await readSanitizedResponseText(
+        response,
+        "Google OAuth rejeitou a troca do codigo."
+      )}`
+    );
   }
 
   return (await response.json()) as { access_token: string };
@@ -77,7 +83,12 @@ export async function fetchGoogleUser(accessToken: string) {
   });
 
   if (!response.ok) {
-    throw new Error(`Falha ao ler perfil Google: ${await response.text()}`);
+    throw new Error(
+      `Falha ao ler perfil Google: ${await readSanitizedResponseText(
+        response,
+        "Nao foi possivel ler o perfil Google."
+      )}`
+    );
   }
 
   return (await response.json()) as {

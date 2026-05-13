@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { companyRouteJson, requireCompanyRouteAccess } from "@/lib/api/company-route-auth";
 import { getCompanyWorkspace } from "@/lib/connectors";
 import {
   generateCompanyExecutionPlan,
@@ -11,6 +12,7 @@ import { recordCompanyAuditEvent } from "@/lib/governance";
 import { syncCompanyGoogleDataOps } from "@/lib/google-data";
 import { syncCompanyLearningMemory } from "@/lib/learning";
 import { deliverOperationalAlertEmails } from "@/lib/operational-alerts";
+import { requireCompanyPermission } from "@/lib/rbac";
 import { getSessionFromCookies } from "@/lib/session";
 import { getUserProfessionalProfile } from "@/lib/user-profiles";
 
@@ -19,20 +21,18 @@ export async function GET(
   context: { params: Promise<{ companyId: string }> }
 ) {
   const { companyId } = await context.params;
-  const workspace = getCompanyWorkspace(companyId);
+  const access = await requireCompanyRouteAccess({
+    companyId,
+    permission: "execution:generate"
+  });
 
-  if (!workspace) {
-    return NextResponse.json({ error: "Empresa nao encontrada" }, { status: 404 });
+  if (!access.ok) {
+    return access.response;
   }
 
-  return NextResponse.json(
+  return companyRouteJson(
     {
-      executionPlans: workspace.executionPlans
-    },
-    {
-      headers: {
-        "Cache-Control": "no-store"
-      }
+      executionPlans: access.workspace.executionPlans
     }
   );
 }
@@ -58,6 +58,25 @@ export async function POST(
 
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "generate-plan");
+  const requiredPermission =
+    intent === "apply-auto"
+      ? "execution:apply"
+      : intent === "sync-learning"
+        ? "agent:learn"
+        : "execution:generate";
+  const permissionCheck = requireCompanyPermission({
+    companySlug: workspace.company.slug,
+    profile: professionalProfile,
+    permission: requiredPermission,
+    actor: session.email
+  });
+
+  if (!permissionCheck.allowed) {
+    return NextResponse.json(
+      { error: permissionCheck.message, auditId: permissionCheck.auditId },
+      { status: 403 }
+    );
+  }
 
   if (intent === "sync-learning") {
     syncCompanyLearningMemory({

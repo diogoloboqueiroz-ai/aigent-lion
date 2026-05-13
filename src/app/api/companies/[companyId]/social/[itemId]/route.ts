@@ -24,6 +24,7 @@ import {
   rejectSocialAdDraft
 } from "@/lib/social-ops";
 import { buildSocialRuntimeTaskForAd, getCompanySocialBinding } from "@/lib/social-runtime";
+import { requireCompanyPermission } from "@/lib/rbac";
 import { getSessionFromCookies } from "@/lib/session";
 import { getUserProfessionalProfile } from "@/lib/user-profiles";
 
@@ -44,6 +45,20 @@ export async function POST(
 
   if (!workspace) {
     return NextResponse.json({ error: "Empresa nao encontrada" }, { status: 404 });
+  }
+
+  const permissionCheck = requireCompanyPermission({
+    companySlug: workspace.company.slug,
+    profile: professionalProfile,
+    permission: "governance:review",
+    actor: session.email
+  });
+
+  if (!permissionCheck.allowed) {
+    return NextResponse.json(
+      { error: permissionCheck.message, auditId: permissionCheck.auditId },
+      { status: 403 }
+    );
   }
 
   const formData = await request.formData();

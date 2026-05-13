@@ -63,6 +63,18 @@ export default async function CompanyWorkspacePage({ params }: PageProps) {
             <Link href={`/empresas/${workspace.company.slug}/planejamento`} className="tag">
               Planejamento
             </Link>
+            <Link href={`/empresas/${workspace.company.slug}/campanhas`} className="tag">
+              Campanhas
+            </Link>
+            <Link href={`/empresas/${workspace.company.slug}/mission-control`} className="tag">
+              Mission Control
+            </Link>
+            <Link href={`/empresas/${workspace.company.slug}/aigent`} className="tag">
+              Aigent Lion
+            </Link>
+            <Link href={`/empresas/${workspace.company.slug}/evolution-center`} className="tag">
+              Evolution Center
+            </Link>
             <Link href={`/empresas/${workspace.company.slug}/dados`} className="tag">
               Dados
             </Link>

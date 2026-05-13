@@ -1,20 +1,18 @@
-import { NextResponse } from "next/server";
-import { getCompanyWorkspace } from "@/lib/connectors";
+import { companyRouteJson, requireCompanyRouteAccess } from "@/lib/api/company-route-auth";
 
 export async function GET(
   _request: Request,
   context: { params: Promise<{ companyId: string }> }
 ) {
   const { companyId } = await context.params;
-  const workspace = getCompanyWorkspace(companyId);
+  const access = await requireCompanyRouteAccess({
+    companyId,
+    permission: "agent:decide"
+  });
 
-  if (!workspace) {
-    return NextResponse.json({ error: "Empresa nao encontrada" }, { status: 404 });
+  if (!access.ok) {
+    return access.response;
   }
 
-  return NextResponse.json(workspace, {
-    headers: {
-      "Cache-Control": "no-store"
-    }
-  });
+  return companyRouteJson(access.workspace);
 }

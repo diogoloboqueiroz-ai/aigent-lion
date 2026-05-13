@@ -1,6 +1,11 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import {
+  companyRouteJson,
+  requireCompanyRouteAccess,
+  requireResolvedCompanyRoutePermission
+} from "@/lib/api/company-route-auth";
+import {
   buildCreativeAssetFromPublishingDraft,
   buildGeneratedCreativeAsset,
   buildPublishingApprovalRequest,
@@ -29,22 +34,20 @@ export async function GET(
   context: { params: Promise<{ companyId: string }> }
 ) {
   const { companyId } = await context.params;
-  const workspace = getCompanyWorkspace(companyId);
+  const access = await requireCompanyRouteAccess({
+    companyId,
+    permission: "execution:generate"
+  });
 
-  if (!workspace) {
-    return NextResponse.json({ error: "Empresa nao encontrada" }, { status: 404 });
+  if (!access.ok) {
+    return access.response;
   }
 
-  return NextResponse.json(
+  return companyRouteJson(
     {
-      tools: getCompanyCreativeTools(workspace.company),
-      creativeAssets: getCompanyCreativeAssets(workspace.company.slug),
-      publishingRequests: getCompanyPublishingRequests(workspace.company.slug)
-    },
-    {
-      headers: {
-        "Cache-Control": "no-store"
-      }
+      tools: getCompanyCreativeTools(access.workspace.company),
+      creativeAssets: getCompanyCreativeAssets(access.workspace.company.slug),
+      publishingRequests: getCompanyPublishingRequests(access.workspace.company.slug)
     }
   );
 }
@@ -70,6 +73,16 @@ export async function POST(
 
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "save-tool");
+  const forbidden = requireResolvedCompanyRoutePermission({
+    workspace,
+    profile: professionalProfile,
+    session,
+    permission: intent === "request-publish" ? "governance:review" : "execution:generate"
+  });
+
+  if (forbidden) {
+    return forbidden;
+  }
 
   if (intent === "generate-creative") {
     const assetType = String(formData.get("assetType") ?? "post") as PublishingApprovalRequest["assetType"];

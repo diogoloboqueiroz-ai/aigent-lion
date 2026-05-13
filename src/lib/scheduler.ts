@@ -198,9 +198,19 @@ function getDefaultSchedulerJobs(company: CompanyProfile, professionalProfile?: 
       category: "operations",
       cadence: "daily",
       autonomy: "auto_low_risk",
-      objective: "Gerar um plano operacional priorizado e aplicar acoes seguras a partir dos sinais reais do workspace.",
+      objective: "Rodar o ciclo autonomo oficial do Agent Lion e transformar sinais reais em prioridades, execucao governada e aprendizado.",
       actionSummary:
-        "Ler approvals, conexoes, runtime, social insights, snapshots e relatorios, materializar acoes auto_low_risk e escalar o restante para revisao."
+        "Executar contexto -> diagnostico -> tese do CMO -> decisao -> policy -> execucao low-risk -> aprendizado, e depois salvar o plano executivo derivado do ciclo."
+    }, now),
+    buildJob(company, {
+      slug: "agent-runtime-drain",
+      label: "Drain da fila oficial do Agent Lion",
+      category: "operations",
+      cadence: "hourly",
+      autonomy: "auto_low_risk",
+      objective: "Consumir a fila oficial do ciclo autonomo com retries, locks e rastreabilidade.",
+      actionSummary:
+        "Drenar a fila oficial do Agent Lion, processando ciclos enfileirados fora do request que os originou."
     }, now),
     buildJob(company, {
       slug: "learning-pulse",

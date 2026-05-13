@@ -247,6 +247,8 @@ export function buildSocialRuntimeTaskForPost(
     sourceItemId: post.id,
     targetId: binding.targetId,
     sourceExperimentId: post.sourceExperimentId,
+    sourceCampaignBriefId: post.sourceCampaignBriefId,
+    sourceCampaignBriefVersion: post.sourceCampaignBriefVersion,
     variantLabel: post.variantLabel,
     attemptCount: 0
   } satisfies SocialRuntimeTask;
@@ -272,6 +274,8 @@ export function buildSocialRuntimeTaskForAd(
     sourceItemId: draft.id,
     targetId: binding.targetId,
     sourceExperimentId: draft.sourceExperimentId,
+    sourceCampaignBriefId: draft.sourceCampaignBriefId,
+    sourceCampaignBriefVersion: draft.sourceCampaignBriefVersion,
     variantLabel: draft.variantLabel,
     attemptCount: 0
   } satisfies SocialRuntimeTask;

@@ -1,5 +1,20 @@
+import { buildTriggerEvent } from "@/lib/agents/orchestrator";
+import {
+  drainAgentWorkerQueue,
+  enqueueAgentWorkerRun,
+  getQueueIdempotencyKeyForScheduler
+} from "@/lib/agents/queue-processor";
+import { buildAutomationControlTowerSummary } from "@/lib/agents/runtime";
+import { getAgentRuntimeSnapshot } from "@/lib/agents/worker";
+import {
+  canInlineAgentWorkerExecution,
+  getAgentExecutionPlaneMode,
+  isExternalAgentExecutionPlane
+} from "@/lib/agents/execution-plane";
+import { sanitizeErrorMessage } from "@/core/observability/redaction";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { companyRouteJson, requireCompanyRouteAccess } from "@/lib/api/company-route-auth";
 import { getCompanyWorkspace } from "@/lib/connectors";
 import { syncCompanyLeadsToCrm } from "@/lib/crm";
 import { dispatchQueuedLeadConversionSignals } from "@/lib/conversion-runtime";
@@ -17,15 +32,9 @@ import {
   buildSocialRuntimeSyncTask,
   buildSocialRuntimeTaskForPost
 } from "@/lib/social-runtime";
-import {
-  generateCompanyExecutionPlan,
-  materializeExecutionPlanActions,
-  saveCompanyExecutionPlan,
-  syncOperationalAlerts
-} from "@/lib/execution";
 import { syncCompanyGoogleDataOps } from "@/lib/google-data";
 import { syncCompanyLearningMemory } from "@/lib/learning";
-import { deliverOperationalAlertEmails } from "@/lib/operational-alerts";
+import { requireCompanyPermission } from "@/lib/rbac";
 import { parseSchedulerJobForm, parseSchedulerProfileForm, runSchedulerJob } from "@/lib/scheduler";
 import { getSessionFromCookies } from "@/lib/session";
 import { getUserProfessionalProfile } from "@/lib/user-profiles";
@@ -35,22 +44,27 @@ export async function GET(
   context: { params: Promise<{ companyId: string }> }
 ) {
   const { companyId } = await context.params;
-  const workspace = getCompanyWorkspace(companyId);
+  const access = await requireCompanyRouteAccess({
+    companyId,
+    permission: "scheduler:manage"
+  });
 
-  if (!workspace) {
-    return NextResponse.json({ error: "Empresa nao encontrada" }, { status: 404 });
+  if (!access.ok) {
+    return access.response;
   }
+  const { workspace } = access;
 
-  return NextResponse.json(
+  const runtime = await getAgentRuntimeSnapshot(workspace.company.slug, access.profile);
+
+  return companyRouteJson(
     {
       schedulerProfile: workspace.schedulerProfile,
       schedulerJobs: workspace.schedulerJobs,
-      operationalAlerts: workspace.operationalAlerts
-    },
-    {
-      headers: {
-        "Cache-Control": "no-store"
-      }
+      operationalAlerts: workspace.operationalAlerts,
+      automationControlTower: runtime?.controlTower ?? buildAutomationControlTowerSummary(workspace),
+      automationQueue: runtime?.automationQueue ?? workspace.automationQueue,
+      automationDeadLetters: runtime?.automationDeadLetters ?? workspace.automationDeadLetters,
+      automationRuntimeHealth: runtime?.automationRuntimeHealth ?? workspace.automationRuntimeHealth
     }
   );
 }
@@ -76,6 +90,23 @@ export async function POST(
 
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "save-profile");
+  const requiredPermission =
+    intent === "run-job"
+      ? "scheduler:run"
+      : "scheduler:manage";
+  const permissionCheck = requireCompanyPermission({
+    companySlug: workspace.company.slug,
+    profile: professionalProfile,
+    permission: requiredPermission,
+    actor: session.email
+  });
+
+  if (!permissionCheck.allowed) {
+    return NextResponse.json(
+      { error: permissionCheck.message, auditId: permissionCheck.auditId },
+      { status: 403 }
+    );
+  }
 
   if (intent === "save-profile") {
     upsertStoredCompanySchedulerProfile(parseSchedulerProfileForm(formData, workspace.schedulerProfile));
@@ -230,54 +261,66 @@ export async function POST(
           : `Cadencia CRM revisada: ${activeLeads.length} leads ativos, ${overdueFollowUps.length} follow-ups vencidos, ${qualifiedLeads.length} oportunidades qualificadas. Sync externo: ${crmSync.summary}. Conversoes: ${conversionSync.sent} enviadas, ${conversionSync.blocked} bloqueadas e ${conversionSync.failed} com falha.`
       );
     } else if (currentJob.id.endsWith("execution-pulse")) {
-      const googleSync = await syncCompanyGoogleDataOps(workspace);
-      const latestWorkspace = getCompanyWorkspace(companyId, professionalProfile) ?? workspace;
-      const generatedPlan = generateCompanyExecutionPlan(latestWorkspace, professionalProfile, {
-        origin: "scheduler"
-      });
-      const finalPlan =
-        currentJob.autonomy === "auto_low_risk"
-          ? materializeExecutionPlanActions(latestWorkspace, generatedPlan, session.email, professionalProfile)
-          : generatedPlan;
-      const executedActions =
-        finalPlan.recommendedActions?.filter((action) => action.status === "executed").length ?? 0;
-      const blockedActions =
-        finalPlan.recommendedActions?.filter((action) => action.status === "blocked").length ?? 0;
-      const pendingActions =
-        finalPlan.recommendedActions?.filter((action) => action.status === "recommended").length ?? 0;
+      try {
+        const trigger = buildTriggerEvent(workspace.company.slug, {
+          triggerType: "scheduled_cycle",
+          actor: `scheduler:${currentJob.id}`,
+          summary: `${currentJob.label} disparou o ciclo autonomo oficial desta empresa.`
+        });
+        const queueItem = await enqueueAgentWorkerRun({
+          companySlug: workspace.company.slug,
+          actor: session.email,
+          trigger,
+          reason: `${currentJob.label} enfileirou um novo ciclo autonomo oficial para esta empresa.`,
+          idempotencyKey: getQueueIdempotencyKeyForScheduler(
+            workspace.company.slug,
+            currentJob.id,
+            currentJob.nextRunAt
+          ),
+          schedulerAutonomy: currentJob.autonomy,
+          requestOrigin: new URL(request.url).origin,
+          fallbackRecipientEmail: session.email,
+          source: "scheduler"
+        });
 
-      saveCompanyExecutionPlan(finalPlan);
-      const alerts = syncOperationalAlerts({
-        companySlug: workspace.company.slug,
-        plan: finalPlan,
-        schedulerMinimumPriority: latestWorkspace.schedulerProfile.schedulerAlertMinimumPriority,
-        emailMinimumPriority: latestWorkspace.schedulerProfile.emailAlertMinimumPriority,
-        emailReady: latestWorkspace.connections.some(
-          (connection) => connection.platform === "gmail" && connection.status === "connected"
-        )
-      });
-      const openAlerts = alerts.filter((alert) => alert.status !== "resolved");
-      const openCriticalAlerts = openAlerts.filter((alert) => alert.priority === "critical").length;
-      const emailDelivery = await deliverOperationalAlertEmails({
-        company: workspace.company,
-        alerts,
-        schedulerProfile: latestWorkspace.schedulerProfile,
-        fallbackRecipientEmail: session.email,
-        origin: new URL(request.url).origin
-      });
-      const learnings = syncCompanyLearningMemory({
-        workspace: latestWorkspace,
-        latestPlan: finalPlan,
-        alerts
-      });
-      const freshLearnings = learnings.filter((learning) => learning.status === "fresh").length;
+        nextJob = runSchedulerJob(
+          currentJob,
+          `Pulso autonomo enfileirado com sucesso na fila oficial do Agent Lion. Item: ${queueItem.id}. Autonomia: ${currentJob.autonomy}. Execution plane: ${getAgentExecutionPlaneMode()}.`
+        );
+      } catch (error) {
+        const message = sanitizeErrorMessage(error, "Falha ao rodar o ciclo autonomo do scheduler.");
+        nextJob = runSchedulerJob(currentJob, `Falha no ciclo autonomo oficial: ${message}`);
+      }
+    } else if (currentJob.id.endsWith("agent-runtime-drain")) {
+      try {
+        if (isExternalAgentExecutionPlane() && !canInlineAgentWorkerExecution()) {
+          const runtimeSummary = buildAutomationControlTowerSummary(workspace);
+          nextJob = runSchedulerJob(
+            currentJob,
+            `Execution plane externo ativo. Nenhum drain inline foi executado. Fila atual: ${runtimeSummary.queuePressure.queuedRuns} runs queued e ${runtimeSummary.queuePressure.queuedRetries} retries queued.`
+          );
+        } else {
+        const drain = await drainAgentWorkerQueue({
+          companySlug: workspace.company.slug,
+          actor: session.email,
+          executionContext: "inline_control_plane",
+          professionalProfile,
+          requestOrigin: new URL(request.url).origin,
+          fallbackRecipientEmail: session.email,
+          limit: 2
+        });
 
-      nextJob = runSchedulerJob(
-        currentJob,
-        currentJob.autonomy === "auto_low_risk"
-          ? `Pulso operacional aplicado: ${executedActions} acoes executadas, ${blockedActions} exigiram revisao ou nao tinham alvo pronto${pendingActions > 0 ? ` e ${pendingActions} continuam recomendadas` : ""}. Google data ops: ${googleSync.summary}. Alertas abertos: ${openAlerts.length}${openCriticalAlerts > 0 ? ` (${openCriticalAlerts} criticos)` : ""}. Emails enviados: ${emailDelivery.deliveredCount}. Falhas de email: ${emailDelivery.failedCount}. Memoria atualizada com ${freshLearnings} novos aprendizados. Prioridade atual: ${finalPlan.tracks[0]?.title ?? "organizar a operacao"}.`
-          : `Pulso operacional salvo com ${finalPlan.tracks.length} trilhas e ${finalPlan.recommendedActions?.length ?? 0} acoes recomendadas. Google data ops: ${googleSync.summary}. Prioridade atual: ${finalPlan.tracks[0]?.title ?? "organizar a operacao"}.`
-      );
+        nextJob = runSchedulerJob(
+          currentJob,
+          drain.processed === 0
+            ? "Nenhum ciclo autonomo aguardava consumo na fila oficial."
+            : `Fila oficial drenada: ${drain.completed} concluidos, ${drain.requeued} requeued, ${drain.deadLettered} dead-letter.${drain.lastCompletedRunId ? ` Ultimo run: ${drain.lastCompletedRunId}.` : ""}`
+        );
+        }
+      } catch (error) {
+        const message = sanitizeErrorMessage(error, "Falha ao drenar a fila oficial do Agent Lion.");
+        nextJob = runSchedulerJob(currentJob, `Falha no drain do worker oficial: ${message}`);
+      }
     } else if (currentJob.id.endsWith("learning-pulse")) {
       const learnings = syncCompanyLearningMemory({
         workspace

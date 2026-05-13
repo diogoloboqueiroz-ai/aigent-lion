@@ -89,12 +89,14 @@ function mapSocialPostApproval(post: ScheduledSocialPost): ApprovalCenterItem {
     requestedBy: post.requestedBy,
     summary: post.summary,
     context: `${post.platform} · ${post.format}`,
-    sourcePath: `/empresas/${post.companySlug}/social`,
+    sourcePath: post.sourceCampaignBriefId
+      ? `/empresas/${post.companySlug}/campanhas`
+      : `/empresas/${post.companySlug}/social`,
     actions:
       post.status === "pending_approval"
         ? (["approve", "reject"] satisfies ApprovalCenterAction[])
         : post.status === "scheduled"
-          ? (["mark-posted"] satisfies ApprovalCenterAction[])
+          ? (["queue-runtime", "mark-posted"] satisfies ApprovalCenterAction[])
           : []
   };
 }
@@ -110,7 +112,9 @@ function mapSocialAdApproval(draft: SocialAdDraft): ApprovalCenterItem {
     requestedBy: draft.requestedBy,
     summary: `${draft.objective}. ${draft.creativeAngle}`,
     context: `${draft.platform} · ${draft.budget}`,
-    sourcePath: `/empresas/${draft.companySlug}/social`,
+    sourcePath: draft.sourceCampaignBriefId
+      ? `/empresas/${draft.companySlug}/campanhas`
+      : `/empresas/${draft.companySlug}/social`,
     actions:
       draft.status === "pending_approval"
         ? (["approve", "reject"] satisfies ApprovalCenterAction[])

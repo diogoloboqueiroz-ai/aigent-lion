@@ -2,6 +2,7 @@ import {
   getStoredGoogleCompanyConnection,
   upsertStoredGoogleCompanyConnection
 } from "@/lib/company-vault";
+import { readSanitizedResponseText } from "@/core/observability/redaction";
 import type { PlatformId } from "@/lib/domain";
 import { getGoogleClientId, getGoogleClientSecret } from "@/lib/google-auth";
 
@@ -80,7 +81,12 @@ export async function refreshGoogleAccessToken(refreshToken?: string, platform?:
   });
 
   if (!response.ok) {
-    throw new Error(`Falha ao renovar token Google: ${await response.text()}`);
+    throw new Error(
+      `Falha ao renovar token Google: ${await readSanitizedResponseText(
+        response,
+        "Google recusou a renovacao da credencial."
+      )}`
+    );
   }
 
   const token = (await response.json()) as {

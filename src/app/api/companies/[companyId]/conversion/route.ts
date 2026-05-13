@@ -1,5 +1,10 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import {
+  companyRouteJson,
+  requireCompanyRouteAccess,
+  requireResolvedCompanyRoutePermission
+} from "@/lib/api/company-route-auth";
 import { getCompanyWorkspace } from "@/lib/connectors";
 import {
   applyLeadCommercialAutopilot,
@@ -27,29 +32,28 @@ import {
 import { syncLeadConversionSignals } from "@/lib/conversion-runtime";
 import { recordCompanyAuditEvent } from "@/lib/governance";
 import { getSessionFromCookies } from "@/lib/session";
+import { getUserProfessionalProfile } from "@/lib/user-profiles";
 
 export async function GET(
   _request: Request,
   context: { params: Promise<{ companyId: string }> }
 ) {
   const { companyId } = await context.params;
-  const workspace = getCompanyWorkspace(companyId);
+  const access = await requireCompanyRouteAccess({
+    companyId,
+    permission: "agent:decide"
+  });
 
-  if (!workspace) {
-    return NextResponse.json({ error: "Empresa nao encontrada" }, { status: 404 });
+  if (!access.ok) {
+    return access.response;
   }
 
-  return NextResponse.json(
+  return companyRouteJson(
     {
-      conversion: workspace.keywordStrategy,
-      crmProfile: workspace.crmProfile,
-      leads: workspace.leads,
-      conversionEvents: workspace.conversionEvents
-    },
-    {
-      headers: {
-        "Cache-Control": "no-store"
-      }
+      conversion: access.workspace.keywordStrategy,
+      crmProfile: access.workspace.crmProfile,
+      leads: access.workspace.leads,
+      conversionEvents: access.workspace.conversionEvents
     }
   );
 }
@@ -59,7 +63,6 @@ export async function POST(
   context: { params: Promise<{ companyId: string }> }
 ) {
   const { companyId } = await context.params;
-  const workspace = getCompanyWorkspace(companyId);
   const cookieStore = await cookies();
   const session = getSessionFromCookies(cookieStore);
 
@@ -67,12 +70,31 @@ export async function POST(
     return NextResponse.redirect(new URL("/?auth=login-required", request.url), { status: 303 });
   }
 
+  const professionalProfile = getUserProfessionalProfile(session);
+  const workspace = getCompanyWorkspace(companyId, professionalProfile);
+
   if (!workspace) {
     return NextResponse.json({ error: "Empresa nao encontrada" }, { status: 404 });
   }
 
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "save-strategy");
+  const forbidden = requireResolvedCompanyRoutePermission({
+    workspace,
+    profile: professionalProfile,
+    session,
+    permission:
+      intent === "sync-crm"
+        ? "execution:apply"
+        : intent === "create-lead"
+          ? "execution:generate"
+          : "agent:decide"
+  });
+
+  if (forbidden) {
+    return forbidden;
+  }
+
   const crmProfile = getCompanyCrmProfile(workspace.company);
 
   if (intent === "save-crm") {

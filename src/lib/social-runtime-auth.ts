@@ -2,6 +2,7 @@ import {
   getStoredSocialCompanyConnection,
   upsertStoredSocialCompanyConnection
 } from "@/lib/company-vault";
+import { readSanitizedResponseText } from "@/core/observability/redaction";
 import type { SocialPlatformId } from "@/lib/domain";
 
 type TikTokRefreshResult = {
@@ -79,7 +80,12 @@ async function refreshTikTokAccessToken(refreshToken: string): Promise<TikTokRef
   });
 
   if (!response.ok) {
-    throw new Error(`Falha ao renovar token TikTok: ${await response.text()}`);
+    throw new Error(
+      `Falha ao renovar token TikTok: ${await readSanitizedResponseText(
+        response,
+        "TikTok recusou a renovacao da credencial."
+      )}`
+    );
   }
 
   const rawToken = (await response.json()) as {

@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { readSanitizedResponseText } from "@/core/observability/redaction";
 import type { PlatformId, SocialPlatformId } from "@/lib/domain";
 import { areAllEnvConfigured } from "@/lib/env";
 
@@ -206,7 +207,12 @@ export async function exchangeSocialConnectionCode(
     });
 
     if (!response.ok) {
-      throw new Error(`Falha ao trocar codigo Meta OAuth: ${await response.text()}`);
+      throw new Error(
+        `Falha ao trocar codigo Meta OAuth: ${await readSanitizedResponseText(
+          response,
+          "Meta OAuth rejeitou a troca do codigo."
+        )}`
+      );
     }
 
     const token = (await response.json()) as {
@@ -248,7 +254,12 @@ export async function exchangeSocialConnectionCode(
     });
 
     if (!response.ok) {
-      throw new Error(`Falha ao trocar codigo LinkedIn OAuth: ${await response.text()}`);
+      throw new Error(
+        `Falha ao trocar codigo LinkedIn OAuth: ${await readSanitizedResponseText(
+          response,
+          "LinkedIn OAuth rejeitou a troca do codigo."
+        )}`
+      );
     }
 
     const token = (await response.json()) as {
@@ -295,7 +306,12 @@ export async function exchangeSocialConnectionCode(
   });
 
   if (!response.ok) {
-    throw new Error(`Falha ao trocar codigo TikTok OAuth: ${await response.text()}`);
+    throw new Error(
+      `Falha ao trocar codigo TikTok OAuth: ${await readSanitizedResponseText(
+        response,
+        "TikTok OAuth rejeitou a troca do codigo."
+      )}`
+    );
   }
 
   const rawToken = (await response.json()) as {
