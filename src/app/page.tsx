@@ -37,6 +37,31 @@ export default async function Home() {
   const marketingToolSummary = getMarketingToolboxSummary();
   const desktopAgent = getDesktopAgentProfile();
   const internetIntel = getInternetIntelligenceProfile();
+  const googleOAuthReady = hasGoogleOAuthConfigured();
+  const readinessCards = [
+    {
+      label: "Login Google",
+      value: googleOAuthReady ? "Ativo" : "Aguardando OAuth",
+      detail: googleOAuthReady
+        ? "Operador pode entrar e abrir os workspaces multiempresa."
+        : "Credenciais Google ainda nao foram conectadas neste ambiente.",
+      tone: googleOAuthReady ? "live" : "readiness"
+    },
+    {
+      label: "Cofre de conexoes",
+      value: vaultReady ? "Seguro" : "Readiness",
+      detail: vaultReady
+        ? "Namespace criptografado pronto para credenciais por empresa."
+        : "Defina a chave do vault antes de persistir tokens reais.",
+      tone: vaultReady ? "live" : "readiness"
+    },
+    {
+      label: "Autonomia",
+      value: `${blueprint.automationMode} por padrao`,
+      detail: "Acoes sensiveis seguem protegidas por policy, aprovacao e auditoria.",
+      tone: "live"
+    }
+  ] as const;
 
   return (
     <main style={{ padding: "32px 0 80px" }}>
@@ -60,10 +85,10 @@ export default async function Home() {
             }}
           />
           <div style={{ position: "relative", display: "grid", gap: 18 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 18, flexWrap: "wrap" }}>
+            <div className="premium-nav">
               <div className="tag">{blueprint.automationMode} por padrao</div>
               {session ? (
-                <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                <div className="premium-nav-actions">
                   <span className="tag">Google login ativo</span>
                   <Link href="/perfil-profissional" className="tag">
                     Perfil profissional
@@ -86,20 +111,16 @@ export default async function Home() {
                   </a>
                 </div>
               ) : (
-                <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                <div className="premium-nav-actions">
                   <a href="/api/auth/google/start" className="tag">
-                    Entrar com Google
+                    {googleOAuthReady ? "Entrar com Google" : "Preparar login Google"}
                   </a>
-                  <span className="muted">
-                    {hasGoogleOAuthConfigured()
-                      ? "Login Google pronto para uso."
-                      : "Configure GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET para ativar o login."}
-                  </span>
-                  <span className="muted">
-                    {vaultReady
-                      ? "Vault criptografado pronto para armazenar conexoes por empresa."
-                      : "Configure VAULT_ENCRYPTION_KEY para persistir tokens por empresa."}
-                  </span>
+                  <Link href="/stack-martech" className="tag">
+                    Ver readiness martech
+                  </Link>
+                  <Link href="/inteligencia-web" className="tag">
+                    Inteligencia web
+                  </Link>
                 </div>
               )}
             </div>
@@ -115,6 +136,12 @@ export default async function Home() {
               <p className="muted" style={{ margin: 0, maxWidth: 860, lineHeight: 1.7 }}>
                 O agente centraliza estrategia, conteudo, metricas, aprovacoes e economia de spend, mas cada empresa continua com seu proprio namespace de credenciais, trilha de auditoria e plano operacional.
               </p>
+            </div>
+
+            <div className="premium-status-strip" aria-label="Status operacional do Agent Lion">
+              {readinessCards.map((card) => (
+                <StatusPill key={card.label} {...card} />
+              ))}
             </div>
 
             <div className="grid-auto">
@@ -557,6 +584,32 @@ function MetricCard({ label, value }: { label: string; value: string }) {
         {label}
       </span>
       <strong style={{ fontSize: "1.6rem" }}>{value}</strong>
+    </article>
+  );
+}
+
+function StatusPill({
+  label,
+  value,
+  detail,
+  tone
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  tone: "live" | "readiness" | "blocked";
+}) {
+  const toneClass = tone === "live" ? "status-live" : tone === "blocked" ? "status-blocked" : "status-readiness";
+
+  return (
+    <article className={`status-pill ${toneClass}`}>
+      <span className="muted" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+        {label}
+      </span>
+      <strong>{value}</strong>
+      <span className="muted" style={{ fontSize: 13, lineHeight: 1.45 }}>
+        {detail}
+      </span>
     </article>
   );
 }
