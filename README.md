@@ -55,6 +55,16 @@ Para habilitar login e onboarding de contas Google por empresa, configure tambem
 
 - `AUTH_SESSION_SECRET`
 - `VAULT_ENCRYPTION_KEY`
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+
+Antes de promover um ambiente com login real, rode:
+
+```bash
+npm run agent:auth:check
+```
+
+Quando `NEXT_PUBLIC_APP_URL` estiver definido, o check imprime os redirect URIs que precisam estar cadastrados no Google Cloud OAuth Client.
 
 Para habilitar onboarding social real por empresa, configure tambem:
 

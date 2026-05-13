@@ -14,6 +14,7 @@
     "agent:worker:once": "node --import tsx src/scripts/agent-worker.ts --once",
     "agent:worker:supervised": "node --import tsx src/scripts/agent-worker-supervisor.ts",
     "agent:store:check": "node --import tsx src/scripts/check-managed-automation-store.ts",
+    "agent:auth:check": "node --import tsx src/scripts/check-google-oauth.ts",
     "agent:observability:check": "node --import tsx src/scripts/check-observability-collector.ts",
     "agent:production:check": "node --import tsx src/scripts/check-agent-production-gates.ts"
   },

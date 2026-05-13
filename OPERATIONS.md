@@ -13,6 +13,7 @@ Este documento resume como operar o Agent Lion com seguranca local, previsibilid
 - `npm run build`
 - `npm run check`
 - `npm run agent:store:check`
+- `npm run agent:auth:check`
 - `npm run agent:observability:check`
 
 ## Variaveis de ambiente criticas
@@ -21,6 +22,8 @@ Este documento resume como operar o Agent Lion com seguranca local, previsibilid
 
 - `AUTH_SESSION_SECRET`
 - `VAULT_ENCRYPTION_KEY`
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
 - `DATABASE_URL`
 - `AGENT_AUTOMATION_STORE_MODE=managed`
 - `AGENT_EXECUTION_PLANE_MODE=external`
@@ -150,6 +153,7 @@ Scripts:
 - `npm run agent:worker:once`
 - `npm run agent:worker:supervised`
 - `npm run agent:store:check`
+- `npm run agent:auth:check`
 - `npm run agent:observability:check`
 - `npm run agent:production:check`
 
@@ -162,6 +166,7 @@ Modo recomendado em producao:
 - worker dedicado consome a fila oficial
 - supervisor local/VM pode usar `npm run agent:worker:supervised -- --restart-delay-ms=5000`
 - `agent:store:check` passa antes do deploy
+- `agent:auth:check` passa antes do deploy
 - `agent:observability:check` passa antes do deploy
 - `agent:production:check` passa antes do deploy
 - `controlTower.workerHealth.status` em `healthy`
@@ -175,11 +180,18 @@ O comando falha fechado quando `NODE_ENV=production` e algum gate critico estive
 - `DATABASE_URL`
 - `AGENT_AUTOMATION_STORE_MODE=managed`
 - `AUTH_SESSION_SECRET`
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
 
 O comando tambem emite warnings quando configuracoes operacionais importantes nao estao prontas:
 
 - `AGENT_EXECUTION_PLANE_MODE=external`
 - `AGENT_OBSERVABILITY_COLLECTOR_FORWARD_URL` ou `AGENT_OBSERVABILITY_WEBHOOK_URL`
+
+`npm run agent:auth:check` valida a presenca das credenciais Google OAuth e, quando `NEXT_PUBLIC_APP_URL` estiver definido, imprime os redirect URIs que precisam estar cadastrados no Google Cloud:
+
+- `[NEXT_PUBLIC_APP_URL]/api/auth/google/callback`
+- `[NEXT_PUBLIC_APP_URL]/api/auth/google/connect/callback`
 
 Esses gates nao substituem o deploy checklist, mas impedem que o agente seja promovido com persistencia, sessao ou runtime em modo inseguro.
 
@@ -199,6 +211,7 @@ Antes de considerar o ambiente apto, confirmar:
 
 - `npm run check` verde
 - `npm run agent:production:check` verde no ambiente alvo
+- `npm run agent:auth:check` verde no ambiente alvo
 - queue sem acumulacao anormal
 - dead-letter controlado
 - circuit breakers sem open state persistente sem motivo conhecido

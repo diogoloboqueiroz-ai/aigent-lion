@@ -11,6 +11,7 @@ export function evaluateAgentProductionGates(env: NodeJS.ProcessEnv = process.en
   const isProduction = env.NODE_ENV === "production";
   const storeMode = (env.AGENT_AUTOMATION_STORE_MODE ?? "").trim().toLowerCase();
   const executionPlane = (env.AGENT_EXECUTION_PLANE_MODE ?? "").trim().toLowerCase();
+  const hasGoogleOAuth = Boolean(env.GOOGLE_CLIENT_ID?.trim() && env.GOOGLE_CLIENT_SECRET?.trim());
 
   return [
     {
@@ -36,6 +37,12 @@ export function evaluateAgentProductionGates(env: NodeJS.ProcessEnv = process.en
       status: !isProduction || Boolean(env.AUTH_SESSION_SECRET?.trim()) ? "pass" : "fail",
       summary: "AUTH_SESSION_SECRET must be explicit in production.",
       remediation: "Set a strong AUTH_SESSION_SECRET and rotate if it was ever committed or shared."
+    },
+    {
+      id: "google-oauth",
+      status: !isProduction || hasGoogleOAuth ? "pass" : "fail",
+      summary: "Google OAuth credentials must be configured in production.",
+      remediation: "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, then run npm run agent:auth:check."
     },
     {
       id: "observability-sink",

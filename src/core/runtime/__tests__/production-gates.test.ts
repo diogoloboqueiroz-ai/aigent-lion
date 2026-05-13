@@ -10,6 +10,7 @@ test("production gates fail closed without managed store and database", () => {
   assert.equal(gates.find((gate) => gate.id === "database-url")?.status, "fail");
   assert.equal(gates.find((gate) => gate.id === "managed-store")?.status, "fail");
   assert.equal(gates.find((gate) => gate.id === "session-secret")?.status, "fail");
+  assert.equal(gates.find((gate) => gate.id === "google-oauth")?.status, "fail");
 });
 
 test("production gates pass critical requirements with managed configuration", () => {
@@ -19,6 +20,8 @@ test("production gates pass critical requirements with managed configuration", (
     AGENT_AUTOMATION_STORE_MODE: "managed",
     AGENT_EXECUTION_PLANE_MODE: "external",
     AUTH_SESSION_SECRET: "strong-secret",
+    GOOGLE_CLIENT_ID: "google-client-id",
+    GOOGLE_CLIENT_SECRET: "google-client-secret",
     AGENT_OBSERVABILITY_WEBHOOK_URL: "https://observability.example.com/lion"
   });
 
