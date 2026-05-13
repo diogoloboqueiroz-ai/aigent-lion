@@ -18,7 +18,7 @@
     "agent:production:check": "node --import tsx src/scripts/check-agent-production-gates.ts"
   },
   "dependencies": {
-    "next": "^16.2.3",
+    "next": "^16.2.6",
     "pg": "^8.20.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
@@ -31,9 +31,12 @@
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "eslint": "^9.38.0",
-    "eslint-config-next": "^16.2.3",
+    "eslint-config-next": "^16.2.6",
     "tailwindcss": "^4.1.13",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "postcss": "^8.5.10"
   }
 }
