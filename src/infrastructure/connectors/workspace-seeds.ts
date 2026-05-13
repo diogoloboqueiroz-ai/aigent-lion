@@ -21,13 +21,13 @@ export type WorkspaceSeed = {
 export const workspaceSeeds: WorkspaceSeed[] = [
   {
     company: {
-      id: "company-ortho-prime",
-      slug: "ortho-prime",
-      name: "Ortho Prime",
-      sector: "Saude",
+      id: "company-aurora-health",
+      slug: "aurora-health",
+      name: "Aurora Health",
+      sector: "Servicos locais",
       region: "Brasil",
       timezone: "America/Sao_Paulo",
-      primaryGoal: "Gerar consultas premium com CAC previsivel"
+      primaryGoal: "Gerar oportunidades premium com CAC previsivel"
     },
     stage: "active",
     agentMode: "assistido",
@@ -39,64 +39,64 @@ export const workspaceSeeds: WorkspaceSeed[] = [
     ],
     accounts: [
       {
-        id: "acc-ortho-ga4",
+        id: "acc-aurora-ga4",
         platform: "ga4",
-        name: "GA4 - Ortho Prime",
+        name: "GA4 - Aurora Health",
         timezone: "America/Sao_Paulo",
         accessLevel: "read"
       },
       {
-        id: "acc-ortho-ads",
+        id: "acc-aurora-ads",
         platform: "google-ads",
-        name: "Google Ads - Ortho Prime",
+        name: "Google Ads - Aurora Health",
         timezone: "America/Sao_Paulo",
         currency: "BRL",
         accessLevel: "mixed"
       },
       {
-        id: "acc-ortho-sheets",
+        id: "acc-aurora-sheets",
         platform: "google-sheets",
-        name: "Planilha operacional - Ortho Prime",
+        name: "Planilha operacional - Aurora Health",
         timezone: "America/Sao_Paulo",
         accessLevel: "mixed"
       }
     ],
     connections: [
       {
-        id: "conn-ortho-ga4",
+        id: "conn-aurora-ga4",
         platform: "ga4",
         label: "GA4 principal",
         status: "action_required",
         auth: "oauth",
         scopes: ["analytics.readonly"],
-        accountLabels: ["properties/ortho-prime"],
-        vaultNamespace: "vault://companies/ortho-prime/google",
+        accountLabels: ["properties/aurora-health"],
+        vaultNamespace: "vault://companies/aurora-health/google",
         nextAction: "Autorizar a conta Google da empresa no agente e selecionar a property correta."
       },
       {
-        id: "conn-ortho-gads",
+        id: "conn-aurora-gads",
         platform: "google-ads",
         label: "Conta Google Ads",
         status: "not_connected",
         auth: "oauth",
         scopes: ["adwords"],
         accountLabels: ["Sem conta vinculada"],
-        vaultNamespace: "vault://companies/ortho-prime/google-ads",
+        vaultNamespace: "vault://companies/aurora-health/google-ads",
         nextAction: "Conectar a conta Ads desta empresa pelo agente e mapear customer id."
       },
       {
-        id: "conn-ortho-sheets",
+        id: "conn-aurora-sheets",
         platform: "google-sheets",
         label: "Google Sheets operacional",
         status: "not_connected",
         auth: "oauth",
         scopes: ["spreadsheets"],
         accountLabels: ["Planilha operacional"],
-        vaultNamespace: "vault://companies/ortho-prime/google-sheets",
+        vaultNamespace: "vault://companies/aurora-health/google-sheets",
         nextAction: "Conectar a planilha mestre desta empresa para atualizar KPIs e relatorios internos."
       },
       {
-        id: "conn-ortho-meta",
+        id: "conn-aurora-meta",
         platform: "meta",
         label: "Ad account Meta",
         status: "action_required",
@@ -104,14 +104,14 @@ export const workspaceSeeds: WorkspaceSeed[] = [
         scopes: ["ads_management"],
         accountLabels: ["act_1234567890"],
         lastSync: "2026-03-27T14:40:00.000Z",
-        vaultNamespace: "vault://companies/ortho-prime/meta",
+        vaultNamespace: "vault://companies/aurora-health/meta",
         nextAction: "Renovar token desta empresa e revalidar app secret proof."
       }
     ],
     snapshots: [
       {
-        companyId: "company-ortho-prime",
-        companyName: "Ortho Prime",
+        companyId: "company-aurora-health",
+        companyName: "Aurora Health",
         platform: "google-ads",
         window: "7d",
         spend: 3200,
@@ -123,8 +123,8 @@ export const workspaceSeeds: WorkspaceSeed[] = [
         notes: ["Snapshot isolado por empresa.", "Usar este formato para todas as workspaces."]
       },
       {
-        companyId: "company-ortho-prime",
-        companyName: "Ortho Prime",
+        companyId: "company-aurora-health",
+        companyName: "Aurora Health",
         platform: "ga4",
         window: "7d",
         impressions: 12400,
@@ -137,7 +137,7 @@ export const workspaceSeeds: WorkspaceSeed[] = [
     ],
     audit: [
       {
-        id: "audit-ortho-001",
+        id: "audit-aurora-001",
         timestamp: "2026-03-28T17:05:00.000Z",
         connector: "meta",
         kind: "warning",
@@ -145,7 +145,7 @@ export const workspaceSeeds: WorkspaceSeed[] = [
         details: "A conexao desta empresa ficou em action_required ate renovar o token."
       },
       {
-        id: "audit-ortho-002",
+        id: "audit-aurora-002",
         timestamp: "2026-03-28T16:20:00.000Z",
         connector: "system",
         kind: "decision",
